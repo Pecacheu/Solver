@@ -8,7 +8,8 @@ Btw any formulas in here are 100% figured out by my dumb Rai butt as I read thro
 #### In Run Matrix Mode (Default)
 - Type `?` for command list.
 - Run a command with `` `<cmd> [arg1] [arg2]...`` *(Can enclose args in quotes)*
-- Set a variable (a-z) like `x = 2*3`
-- Solve a formula like `(x^2 + 6)/3`
-- Simplify a formula like `simp x^3 + 4x^3`
+- Set a variable (a-z) like `x = 2*3` -> `x = 6`
+- Solve a formula like `(x^2 + 6)/3` -> 14
+- Enable Simplify mode with `simp`
+- Then simplify a formula like `x^3 + 4x^3` -> `5x^3`
 - Type `q` to quit.
