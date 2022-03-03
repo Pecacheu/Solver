@@ -9,7 +9,6 @@ function getN(q) {
 	});
 }
 function use(t,u) {msg("Usage:",t,u)}
-function NS(n) {return n<0?'- '+(-n):'+ '+n} //Print Neg/Pos Term
 function NM(n,sb) {return n==1?'':(sb||'')+(n==-1?'-':n)} //Print Multiplier
 function XP(p,x) {if(!x)x='x';return p?NM(p,x+'^')||x:''} //Print Power
 function LF(n) { //List Factors
@@ -24,7 +23,7 @@ function aPct(a,p) { //Percentile
 //From Utils.js
 Array.prototype.each = function(fn,st,en) {
 	let i=st||0,l=this.length,r; if(en) l=en<0?l-en:en;
-	for(; i<l; i++) if((r=fn(this[i],i,l))<-1) this.splice(i--,1),l--; else if(r!=null) return r;
+	for(; i<l; i++) if((r=fn(this[i],i,l))=='!') this.splice(i--,1),l--; else if(r!=null) return r;
 }
 
 function tstRng(n,f,min,max,stp) {
@@ -49,23 +48,28 @@ async function getF(A) {
 
 //============================================== Polynomial Lib ==============================================
 
-const DN=/^-\s*-/, TS=/(?:^|\(|(?:[+-]\s*){1,2})(?:\((?:\([^()]+\)|[^()])+\)|[/*^]\s*-?|[^()/*^+=-]+)+/g,
+const PT=/[^\d.a-z()/*^+=-\s]/, DN=/^-\s*-/,
+TS=/(?:^|\(|(?:[+=-]\s*){1,2})(?:\((?:\([^()]+\)|[^()])+\)|[/*^]\s*-?|[^()/*^+=-]+)+/g,
 DP=/([*/])?\s*(-?\s*(?:[\d.]+|(?:sqrt)?\((?:\([^()]+\)|[^()])+\)|[a-z]))(?:\^(-?[a-z]|-?[\d.]+))?/g;
 
 class Poly {
 	constructor(f) {
 		this.t=[]; if(Array.isArray(f)) {this.t=f;return}
-		let m; while(m=TS.exec(f)) {m=new Term(m[0]);if(m.d.length)this.t.push(m)}
+		let m; if(PT.test(f)) throw "Bad Poly";
+		for(m of f.matchAll(TS)) {m=new Term(m[0]);if(m.d.length)this.t.push(m)}
 	}
 	s(j) {let s='';this.t.each((t,i) => {s+=t.s(i,j)});return s}
 	toString() {return this.s()}
-	simp() { //Simplify
+	simp(m) { //Simplify
 		let d=this.t.concat(),i=0,t;
 		for(; i<d.length; i++) {
-			t=d[i]; t.simp();
-			d.each(n => {if(t.mat(n)) return t.e+=n.e,-2},i+1);
+			t=d[i]; t.simp(m);
+			d.each(n => {if(t.mat(n)) return t.e+=n.e,'!'},i+1);
 		}
 		return new Poly(d);
+	}
+	lt() { //Leading Term
+		let l; this.t.each(t => {if((!l || t.xp()>l.xp()) && !t.q) l=t}); return l;
 	}
 }
 class Term {
@@ -73,25 +77,17 @@ class Term {
 		let d=this.d=[],m;
 		if(Array.isArray(t)) this.d=d=t; else {
 			t=t.toString().replace(DN,'');
-			if(t.startsWith('=')) this.q=1; //TODO: Better support for equals?
-			while(m=DP.exec(t)) { //Multi/Power
-				m=new SubTerm(m[2],m[3],m[1]=='/');
-				if(m.e!=0 && m.x) d.push(m);
-				//Parentheses:
-				/*for(let i=0,l=t.length,c,p=0,is; i<l; i++) {
-					c=t.charAt(i); if(c=='(' && p++ == 0) is=i;
-					else if(c==')' && --p == 0) msg(t.substring(is+1,i));
-					else if(p==-1) throw "Parse Error "+t;
-				}*/
+			if(t.startsWith('=')) this.q=1;
+			for(m of t.matchAll(DP)) { //Multi/Power
+				m=new SubTerm(m[2],m[3],m[1]=='/'); if(m.e!=0 && m.x) d.push(m);
 			}
 		}
 		if(!d[0]) return;
 		Object.defineProperty(this,'e',{get:()=>d[0].e, set:n=>d[0]=d[0].copy(n)});
-		if(!this.e || d[0].d) {
+		if(!this.e || d[0].p!=1 || d[0].d) {
 			if(m=d[0].x.startsWith('-')) this.e=d[0].x.substr(1);
 			d.splice(0,0,new SubTerm(m?-1:1));
 		}
-		m=this.e; d.each(s => {if(s.e&&!s.d) return m*=s.e,-2},1); this.e=m;
 	}
 	s(t,j) {
 		let s='', n=this.d.length!=1&&!this.d[1].d;
@@ -100,17 +96,31 @@ class Term {
 		return t?this.e<0?' - '+s.substr(1):' + '+s:s;
 	}
 	toString() {return this.s()}
-	simp() {
-		this.d.each((s,i) => { //Simplify Fractions
-			if(!s.d) return; let fa=LF(this.e), fb=LF(s.e), n=fa.length-1,f;
-			msg("Factors",fa,fb); for(; n>=0; n--) if(fb.indexOf(f=fa[n])!=-1) {
-				this.e=this.e/f, this.d[i]=s.copy(s.e/f); return (s.e/f==1)?-2:null;
+	simp(m) {
+		let d=this.d;
+		d.each((s,i) => { //Simplify Pow & Par
+			if(s.e && s.p!=1) (d[i]=s=s.copy(Math.pow(s.e,s.p))).p=1;
+			if(s.pr) s.pr=s.pr.simp(m);
+		});
+		let e=this.e,v={},x; d.each((s,i) => { //Combine Exponents & Like-vars
+			if(s.e) {if(s.p==1&&!s.d) return e*=s.e,'!'} else {
+				if(x=v[s.x]) return (s.d?x.p-=s.p:x.p+=s.p),'!';
+				v[s.x]=d[i]=s=s.copy(); if(s.d) s.d=0,s.p=-s.p;
+			}
+		},1);
+		d.each((s,i) => { //Simplify Fractions
+			if(!s.p) return '!'; //Delete 0s
+			if(!s.d) return; let fa=LF(e), fb=LF(s.e), n=fa.length-1,f;
+			if(m) msg("Factors",fa,fb); for(; n>=0; n--) if(fb.indexOf(f=fa[n])!=-1) {
+				e=e/f, d[i]=s.copy(s.e/f); return (s.e/f==1)?'!':null;
 			}
 		});
+		this.e=e;
 	}
+	xp() {return this.d.length>1&&this.d[1].x=='x'?this.d[1].p:0} //X Power
 	et() {let s=this.d[0];return this.d.length==1 && s.e && !s.d && s.p==1}
 	mat(t) { //Check if Terms match
-		if(this.q) return 0; if(this.et()) return t.et();
+		if(this.q||t.q) return 0; if(this.et()) return t.et();
 		let n = !this.d.each(s => {
 			if(s.e && !s.d && s.p==1) return;
 			if(!t.d.each(n => (!n.e && s.x==n.x && s.p==n.p && s.d==n.d)||null)) return 1;
@@ -119,11 +129,13 @@ class Term {
 	}
 	mul(b) { //Multiply Terms
 		if(typeof b=='number') b=new Term(b);
-		let n=this.d.concat(b.length?b:b.d),d=1,x; if(n.each(t => {
-			if(t.e==0) return 0; else if(t.e) return (t.d?d/=t.e:d*=t.e),-2;
-			else if(t.x=='x') return (x?(t.d?x.p-=t.p:x.p+=t.p):x=t.copy()),-2;
-		})==0) return 0;
-		n.splice(0,0,new SubTerm(d)); if(x) n.splice(1,0,x); return new Term(n);
+		let n=this.d.concat(b.length?b:b.d),d=1,v={},x;
+		if(n.each(s => {
+			if(s.e==0) return 1; if(s.e) s.d?d/=s.e:d*=s.e;
+			else (x=v[s.x])?(s.d?x.p-=s.p:x.p+=s.p):v[s.x]=s.copy();
+		})) return 0;
+		d=[new SubTerm(d)]; for(x in v) d.push(x);
+		return new Term(d);
 	}
 	div(b) { //Divide Terms
 		b=b.d.concat(); b.each((t,i) => {(b[i]=t.copy()).d=1});
@@ -139,16 +151,14 @@ class SubTerm {
 	constructor(x,p,d) {
 		let m=this; m.d=d;
 		if(p==0) x=p=1; else m.p=Number(p)||p||1;
-		if(typeof x=='number') m.x=m.e=x;
-		else m.x=x.replace(/ /g,''),m.e=Number(m.x);
+		if(typeof x=='number') m.x=m.e=x; else {
+			m.x=x.replace(/ /g,''),m.e=Number(m.x);
+			if((p=x.indexOf('('))!=-1)
+				m.ps=x.substr(0,p+1),m.pr=new Poly(x.substring(p+1,m.x.length-1));
+		}
 	}
 	s(j,i,n) {
-		let e=this.e,x=this.x; if(!this.e && j) {
-			//Parentheses:
-			if(x.startsWith('(')) x='('+new Poly(x.substring(1,x.length-1)).simp().s(j)+')';
-			else if(x.startsWith('sqrt'))
-				x=(j?'Math.':'')+'sqrt('+new Poly(x.substring(5,x.length-1)).simp().s(j)+')';
-		}
+		let e=this.e,x=this.x; if(this.pr) x=this.ps+this.pr.s(j)+')';
 		if(j) return (i?this.d?'/':'*':'')+(this.p!=1?'Math.pow('+x+','+this.p+')':x);
 		return (this.d?'/':i&&e?'*':'')+(e&&!i&&n?NM(e):XP(this.p,x));
 	}
@@ -177,61 +187,74 @@ function pDiv(a,b,p) { //Divide Polynomials
 	return new Poly(n);
 }
 
+function PS(p,s) {p=new Poly(p);return (s%2?'\n':'')+(s>1?p.simp():p).s()} //Poly String
+function PSS(p) {p=new Poly(p);return p+'\n'+p.simp()} //PS Simp
+function pGet(p,e,q) { //Get Term w/ Exp
+	return p.t.each(t => t.xp()==e&&t.q==q?t.e:null)||0;
+}
+
 //============================================== Code ==============================================
 
 const ML = {
-	r:'Run Matrix', q:'Quadratic Solver', p:'Two Point Solver', y:'Point-Slope Solver',
-	s:'Equation System Solver', qv:'Quadratic to Vertex Form', vq:'Vertex Form to Quadratic',
+	r:'Run Matrix', p:'Polynomial Info', q:'Quadratic Solver',
+	tp:'Two-Point Solver', ps:'Point-Slope Solver', es:'Equation System Solver',
+	/*qv:'Quadratic to Vertex Form', vq:'Vertex Form to Quadratic',
 	lf:'List Factors of N', f:'Factor Polynomial', u:'Formula Evaluator', dr:'Domain/Range Check',
-	mp:'Multiply Polynomial', dp:'Divide Polynomial', sr:'Square Rule', a:'Dataset Analysis'//, h:'Histogram'
+	mp:'Multiply Polynomial', dp:'Divide Polynomial', sr:'Square Rule', a:'Dataset Analysis'*/
+	//, h:'Histogram'
 }, CS=/(?:^|\s+)("[^"]+"|\S+)/g, CC='`';
 
 let MS='',n; for(let k in ML) MS+=(MS?','+(n?' ':'\n'):'')+CC+k+' = '+ML[k], n=!n;
-msg("Pecacheu's Math Solver v1.6"); await run(process.argv);
+msg("Pecacheu's Math Solver v1.6.1"); await run(process.argv);
 
 async function runCmd(s) {
 	let c=[0,0],m; while(m=CS.exec(s)) {
 		m=m[1]; if(m.startsWith('"')) m=m.substr(1,m.length-2); c.push(m);
 	}
-	try {await run(c)} catch(e) {msg('-> '+e)}
+	if(!s || c[2]=='r') use(CC+"<cmd> ...",'');
+	else try {await run(c)} catch(e) {msg('-> '+e)}
 }
 
 async function run(A) {
 let T=A[2], AL=A.length;
 if(!T) T='r'; else if(T=='?') return msg(MS);
-msg(ML[T]?`Mode: ${ML[T]}\n`:"Not Supported!");
+msg(ML[T]?`Mode: ${ML[T]}\n`:"Not supported!");
 if(T=='r') {
 	msg("Type '?' for help, 'q' to quit.");
-	let f,v; while((f=await read('>'))!='q') {
+	let f,v; while((f=(await read('>')).trim())!='q') {
 		if(f=='?') msg(MS); else if(f.startsWith(CC)) await runCmd(f.substr(1));
-		else if(f.startsWith('simp ')) msg(new Poly(f.substr(5)).simp().s());
+		else if(f.startsWith('simp ')) msg(new Poly(f.substr(5)).simp(1).s());
 		else f.split(';').each(s => {
 			if(s.indexOf('=')!=-1) s='global.'+s; else s=new Poly(s).s(1);
 			try{v=eval(s)} catch(e) {v=e.toString()} msg(s,'->',v);
 		});
 	}
-} else if(T=='q') {
-	msg("y = ax^2 + bx + c");
-	let a=await getN("ax^2?"), b=await getN("bx?"), c=await getN("c?"),
-	y=await getN("Y?"), yca=(y-c)/a, n=b/(2*a), ns=Math.pow(n,2);
+} else if(T=='p') { //Poly Info
+	if(AL != 4) return use(T,"<poly>");
+	let p=new Poly(A[3]).simp(), t=p.lt();
+	msg(p+"\nDegree:",t.xp(),"Lead Term: "+t);
+} else if(T=='q') { //Quad Solve
+	let p=new Poly(A[3]).simp();
+	if(AL != 4 || p.lt().xp() > 2) return use(T,"<ax^2 + bx + c = y>");
+	let a=pGet(p,2), b=pGet(p,1), c=pGet(p,0), y=pGet(p,0,1),
+	yc=y-c, n=b/(2*a), ns=PS(`${b}^2/${2*a}^2`,2), ycs=`${yc}/${a}+${ns}`, ycn=PS(ycs);
 
-	msg(`\n${a}x^2 + ${b}x + ${c} = ${y}\n${a}x^2 + ${b}x = ${y-c}`);
-	msg(`x^2 + ${b}x/${a} = ${y-c}/${a}`);
-	msg(`x^2 + ${b/a}x + ${ns} = ${yca} + ${ns} (Add (b/2a)^2 = ${ns} to both sides)`);
-	msg(`(x ${NS(n)})^2 = ${yca+ns} (Apply square rule)`);
-	msg(`x ${NS(n)} = +/-sqrt(${yca+ns})`);
-	msg(`x = sqrt(${yca+ns}) ${NS(-n)}; x = -sqrt(${yca+ns}) ${NS(-n)}`);
-	msg(`x = ${Math.sqrt(yca+ns)-n}; x = ${-Math.sqrt(yca+ns)-n}`);
-} else if(T=='p') {
+	msg(p.s(),PS(`${a}x^2+${b}x=${yc}`,1),PS(`x^2+${b}x/${a}=${yc}/${a}`,1));
+	msg(PS(`x^2+${b}x/${a}+${ns}=${ycs}`,2),`(Add (b/2a)^2 = ${ns} to both sides)`);
+	msg(PS(`(x+${b}/${2*a})^2=${yc}/${a}+${ns}`),"(Apply square rule)")
+	msg(PS(`x+${n}`),`= +/-sqrt(${ycn})`);
+	msg(PS(`x=sqrt(${ycn})-${n}`)+';',PS(`x=-sqrt(${ycn})-${n}`));
+	msg(`x = ${Math.sqrt(yc/a+Math.pow(n,2))-n}; x = ${-Math.sqrt(yc/a+Math.pow(n,2))-n}`);
+} else if(T=='tp') { //Two-Point
 	let x1=await getN("X1?"), y1=await getN("Y1?"), x2=await getN("X2?"),
-	y2=await getN("Y2?"), m=(y2-y1)/(x2-x1), mx=m*-x1, b=mx+y1;
+	y2=await getN("Y2?"), m=(y2-y1)/(x2-x1), mx=m*-x1;
 
 	msg(`\nPoints: (${x1},${y1}) and (${x2},${y2})`);
 	msg(`Slope:\nm = (${y2}-${y1})/(${x2}-${x1})\nm = ${y2-y1}/${x2-x1}\nm = ${m}\n`);
 	msg(`Point-Slope:\ny - y1 = m(x - x1)\ny - ${y1} = ${m}(x - ${x1})`);
-	msg(`y - ${y1} = ${m}x - ${m}*${x1}\ny = ${m}x ${NS(mx)} + ${y1}`);
-	msg(`y = ${m}x ${NS(b)}`);
-} else if(T=='y' || T=='s') {
+	msg(`y - ${y1} = ${m}x - ${m}*${x1}`,'\n'+PS(`y=${m}x+${mx}+${y1}`));
+	msg(PS(`y=${m}x+${mx+y1}`));
+}/* else if(T=='ps' || T=='es') { //Point-Slope / Eq Sys
 	msg("1st Equation (ax/b + cy/d = n)");
 	let a=await getN("A?"), b=await getN("B?"), c=await getN("C?"), d=await getN("D?"),
 	n=await getN("N?"), nd=n*d, ad=a*d, bc=b*c, a2,b2,c2,d2,n2,mt,c3,b3,m,rq,x,y;
@@ -353,7 +376,7 @@ if(T=='r') {
 	let Q1=aPct(a,25), Q3=aPct(a,75), Q=Q3-Q1; o=[];
 	a.each(n => {if(n < Q1-1.5*Q || n > Q3+1.5*Q) o.push(n)});
 	msg("\nMin:",a[0],"Q1:",Q1,"Q2:",M,"Q3:",Q3,"Max:",a[l-1],"\nIQR:",Q,"Outliers:",o);
-}/* else if(T=='h') { //Histogram
+} else if(T=='h') { //Histogram
 	let a=(A[3]||await read("Data?")).split(';'),
 	B=await getN("Bars?"), R=await read("Range?"),S,E,P,p;
 	if(R) R=R.split(','),S=Number(R[0]),E=Number(R[1]);
