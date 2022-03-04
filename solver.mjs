@@ -1,17 +1,12 @@
-import { normalize } from 'path/win32';
 import rdl from 'readline';
 
 const msg=console.log, use=(t,u) => msg("Usage:",t,u),
 rl=rdl.createInterface(process.stdin, process.stdout),
 read=q => new Promise(r=>{rl.question(q+' ',n=>r(n))}),
-RN=n => {
-	try {n=eval(n)} catch(e) {n=null}
-	if(typeof n!='number') throw "NaN!"; return n;
-}, getN=q => read(q).then(RN), //Get Num
-LF=n => { //List Factors
-	let f=[],i=1; n=Math.abs(n); for(; i<=n; i++) if(n%i==0) f.push(i); return f;
-}, NA=Number.isNaN;
-function aPct(a,p) { //Percentile
+RN=n => {try {n=eval(n)} catch(e) {n=null} if(typeof n!='number') throw "NaN!"; return n},
+AB=Math.abs, NA=Number.isFinite, getN=q => read(q).then(RN), //Get Num
+LF=n => {let f=[],i=1; for(n=AB(n); i<=n; i++) if(n%i==0) f.push(i); return f}, //List Factors
+aPct=(a,p) => { //Percentile
 	if(Number.isInteger(p=(a.length-1)*p/100)) return a[p];
 	return (a[Math.floor(p)]+a[Math.ceil(p)])/2;
 }
@@ -26,7 +21,7 @@ function tstRng(n,f,min,max,stp) {
 	msg("Test",n,min,'->',max);
 	let x,xm,xx,y,ym,ymx,yx,yxx,yl;
 	for(x=min; x<=max; x+=stp) {
-		y=f(x); if(!NA(y)) {
+		y=f(x); if(NA(y)) {
 			if(xm==null) xm=x; else xx=x;
 			if(ym==null || y<ym) ym=y,ymx=x; if(yx==null || y>yx) yx=y,yxx=x;
 			if(x==min+1) { if(y>yl) ym=null; else if(y<yl) yx=null; } //Start Trajectory
@@ -47,7 +42,8 @@ async function getF(A) {
 const PT=/[^\d.a-z()/*^+=-\s]/, DN=/^-\s*-/,
 TS=/(?:^|\(|(?:[+=-]\s*){1,2})(?:\((?:\([^()]+\)|[^()])+\)|[/*^]\s*-?|[^()/*^+=-]+)+/g,
 DP=/([*/])?\s*(-?\s*(?:[\d.]+|(?:sqrt)?\((?:\([^()]+\)|[^()])+\)|[a-z]))(?:\^(-?[a-z]|-?[\d.]+))?/g,
-NM=(n,sb,p) => n==1?'':(sb||'')+(n==-1&&!p?'-':n), XP=(p,x) => p?x+NM(p,'^',1):'';
+NM=(n,sb,p) => n==1?'':(sb||'')+(n==-1&&!p?'-':n), XP=(p,x) => p?x+NM(p,'^',1):'',
+inv=x => NA(x)?-x:x.startsWith('-')?x.substr(1):'-'+x;
 class Poly {
 	constructor(f) {
 		this.t=[]; if(Array.isArray(f)) {this.t=f;return}
@@ -84,40 +80,40 @@ class Term {
 		}
 		if(!d[0]) return;
 		Object.defineProperty(this,'e',{get:()=>d[0].e, set:n=>d[0]=d[0].copy(n)});
-		if(NA(this.e) || d[0].p!=1) {
+		if(!NA(this.e) || d[0].p!=1) {
 			if(m=d[0].x.startsWith('-')) this.e=d[0].x.substr(1);
 			d.splice(0,0,new SubTerm(m?-1:1));
 		}
 	}
-	s(t,j) {
-		let m=this, s='', n=m.d.length!=1&&m.d[1].p>0;
-		m.d.each((t,i) => {s+=t.s(j,i,n)}); if(m.q==2) return ' = '+s;
-		return t?m.e<0?' - '+s.substr(1):' + '+s:s;
+	s(t,j) {//l!=1 && !div
+		let m=this,d=m.d,n=AB(m.e)==1&&d.length>1&&d[1].p>0,s='';
+		d.each((t,i) => {s+=t.s(j,i)},1); s=d[0].s(j,0,n)+(j&&n?s.substr(1):s);
+		return m.q==2?' = '+s:t?m.e<0?' - '+s.substr(1):' + '+s:s;
 	}
 	toString() {return this.s()}
 	simp() {
 		let d=this.d;
 		for(let i=0,s; i<d.length; i++) if((s=d[i]).pr) { //Simp Par
 			let p=s.pr.simp(),t=p.t,n=t[0]; if(s.ps.length==1 && t.length==1) {
-				if(s.p<0) n.d.each(s => {s.p=-s.p}); d.splice.apply(d,([i--,1]).concat(n.d));
+				if(s.p<0) n.d.each(s => {s.p=inv(s.p)}); d.splice.apply(d,([i--,1]).concat(n.d));
 			} else d[i]=s.copy(s.ps+p.s()+')');
 		}
-		d.each((s,i) => {if(s.e) (d[i]=s.copy(Math.pow(s.e,Math.abs(s.p)))).p=s.p>0?1:-1}); //Simp Pow
-		let e=this.e,v={},x; d.each((s,i) => {
-			if(!NA(s.e) && s.p==1) { //Combine Exponents
+		let e=this.e,v={},x,n; d.each((s,i) => {
+			if((n=NA(s.p)) && NA(s.e)) { //Combine Exp
+				(d[i]=s=s.copy(Math.pow(s.e,AB(s.p)))).p=s.p>0?1:-1; //Simp Pow
 				if(s.p<0) {if(x=v['/']) return x.e*=s.e,'!'; v['/']=d[i]=s.copy()}
 				else return e*=s.e,'!';
 			} else { //Combine Like-vars
 				if(s.n) s.x=s.xp,s.n=0,e=-e; //Invert Term
-				if(x=v[s.x]) return x.p+=s.p,'!'; v[s.x]=d[i]=s=s.copy();
+				if(n) {if(x=v[s.x]) return x.p+=s.p,'!'; v[s.x]=d[i]=s=s.copy()}
 			}
 		},1);
-		d.each((s,i) => { //Simp Frac
-			if(!s.p) return '!'; //Del 0-Pow
-			if(s.p>0) return; if(s.e==0) e='NaN';
-			let fa=LF(e), fb=LF(s.e), n=fa.length-1,f;
-			for(; n>=0; n--) if(fb.indexOf(f=fa[n])!=-1) {
-				if(s.e<0) f=-f; e=e/f, d[i]=s.copy(s.e/f); return (s.e/f==1)?'!':null;
+		d.each((s,i) => { //Del 0-Pow & Simp Frac
+			if(!s.p) return '!'; if(s.p<0) {
+				if(s.e==0) e='NaN'; let fa=LF(e), fb=LF(s.e), n=fa.length-1,f;
+				for(; n>=0; n--) if(fb.indexOf(f=fa[n])!=-1) {
+					if(s.e<0) f=-f; e=e/f, d[i]=s.copy(s.e/f); return (s.e/f==1)?'!':null;
+				}
 			}
 		});
 		if(!e || e==='NaN') this.d.splice(1); //Del All
@@ -133,7 +129,7 @@ class Term {
 		return this.copy(this.d.concat(b.length?b:b.d)).simp();
 	}
 	div(b) { //Divide Terms
-		b=b.d.concat(); b.each((t,i) => {(b[i]=t.copy()).p=-t.p});
+		b=b.d.concat(); b.each((t,i) => {(b[i]=t.copy()).p=inv(t.p)});
 		return this.mul(b);
 	}
 	add(b,s) { //Add/Sub Terms
@@ -145,18 +141,19 @@ class Term {
 }
 class SubTerm {
 	constructor(x,p,d) {
-		let m=this; if(p==0) x=p=1; m.p=Number(p)||p||1; if(d) m.p=-m.p;
+		let m=this; if(p==0) x=p=1; m.p=Number(p)||p||1; if(d) m.p=inv(m.p);
 		if(typeof x=='number') m.x=(m.e=x).toString(); else {
 			m.x=x=x.replace(/ /g,''); if(m.e=Number(x)) return;
-			m.xp=x.substr((m.n=x.startsWith('-'))?1:0);
+			m.xp=x=x.substr((m.n=x.startsWith('-'))?1:0);
 			if((p=x.indexOf('('))!=-1 && x.endsWith(')'))
 				m.ps=x.substr(0,p+1),m.pr=new Poly(x.substr(p+1,x.length-2));
 		}
 	}
 	s(j,i,n) {
-		let m=this,x=m.x,d=m.p<0,p=d?-m.p:m.p; if(m.pr) x=m.ps+m.pr.s(j)+')';
-		if(j) return (d?'/':i?'*':'')+(p!=1?'Math.pow('+x+','+p+')':x);
-		return (d?'/':i&&(!NA(m.e)||m.n)?'*':'')+(m.e&&!i&&n?NM(m.e):XP(p,x));
+		let m=this,x=m.x,d=m.p<0,p=AB(m.p)||m.p; if(m.e==0) x=0;
+		if(m.pr) x=(m.n?'-':'')+(j&&m.ps.length>1?'Math.':'')+m.ps+m.pr.s(j)+')';
+		x=j?(p==1?x:'Math.pow('+x+','+p+')') : XP(p,x);
+		return (d?'/':i&&(j||NA(m.e)||m.n)?'*':'')+(!i&&n?NM(m.e):x);
 	}
 	copy(x) {return new SubTerm(x==null?this.x:x,this.p)}
 	mat(s) {let m=this;return m.p==s.p && (m.p<0?m.x==s.x:m.xp==s.xp)}
@@ -201,7 +198,7 @@ const ML = {
 }, CS=/(?:^|\s+)("[^"]+"|\S+)/g, CC='`';
 
 let MS='',n; for(let k in ML) MS+=(MS?','+(n?' ':'\n'):'')+CC+k+' = '+ML[k], n=!n;
-msg("Pecacheu's Math Solver v1.6.2"); await run(process.argv);
+msg("Pecacheu's Math Solver v1.6.3"); await run(process.argv);
 
 async function runCmd(s) {
 	let c=[0,0],m; while(m=CS.exec(s)) {
@@ -216,13 +213,13 @@ if(!T) T='r'; else if(T=='?') return msg(MS);
 msg(ML[T]?`Mode: ${ML[T]}\n`:"Not supported!");
 if(T=='r') {
 	msg("Type '?' for help, 'q' to quit.");
-	let f,v,S; while((f=(await read('>')).trim())!='q') try {
+	let f,r,V,S; while((f=(await read('>')).trim())!='q') try {
 		if(f=='?') msg(MS); else if(f.startsWith(CC)) await runCmd(f.substr(1));
 		else f.split(';').each(s => {
 			if(s=='simp') msg("Simplify",(S=!S)?"On":"Off");
-			else if(S) msg(new Poly(f).simp().s()); else {
-				if(s.indexOf('=')!=-1) s='global.'+s; else s=new Poly(s).s(1);
-				try{v=eval(s)} catch(e) {v=e.toString()} msg(s,'->',v);
+			else if(S) msg(new Poly(s).simp().s()); else {
+				s=new Poly(s).s(1); try{r=eval.call(V,s)}
+				catch(e) {r=e.toString()} msg(s,'->',r);
 			}
 		});
 	} catch(e) {msg('->',e.toString())}
@@ -235,22 +232,22 @@ if(T=='r') {
 	if(AL<4 || p.lt().xp()>2) return use(T,"<ax^2 + bx + c = y>");
 	let a=pGet(p,2), b=pGet(p,1), c=pGet(p,0), y=pGet(p,0,1),
 	n=b/(2*a), ns=PS(`${b}^2/${2*a}^2`,2), yca=PS(`${y-c}/${a}`,2), ycn=PS(`${yca}+${ns}`,2),
-	xs=PS(`${b}/${2*a}`), xb=PS(`x+${xs}`), na=Math.sqrt((y-c)/a+Math.pow(n,2));
+	xs=PS(`${b}/${2*a}`,2), xb=PS(`x+${xs}`), na=Math.sqrt((y-c)/a+Math.pow(n,2));
 
 	msg(p.s(),PS(`${a}x^2+${b}x=${y-c}`,1),PS(`x^2+${b}x/${a}=${yca}`,3));
 	msg(PS(`x^2+${b}x/${a}+${ns}=${yca}+${ns}`),`(Add (b/2a)^2 = ${ns} to both sides)`);
 	msg(`(${xb})^2 = ${ycn} (Apply square rule)\n${xb} = +/-sqrt(${ycn})`);
-	msg(PS(`x=sqrt(${ycn})-${xs}`)+';',PS(`x=-sqrt(${ycn})-${xs}`));
+	msg(PS(`x=sqrt(${ycn})-${xs}`,2)+';',PS(`x=-sqrt(${ycn})-${xs}`,2));
 	if(A[4]) return `(x+${na-n})(x+${-na-n})`; msg(`x = ${na-n}; x = ${-na-n}`);
 } else if(T=='lf') { //List Factors
 	if(AL!=4) return use(T,"<x>");
 	msg("Factors:",LF(RN(A[3])));
 } else if(T=='f') { //Factor Poly
 	if(AL!=4) return use(T,"<poly>");
-	let p=new Poly(A[3]).simp(), t=p.lt().xp()+1, tl=[],lt,s='y=';
-	for(let i=0,n,l; i<t; i++) {
+	let p=new Poly(A[3]).simp(), t=p.lt().xp()+1, tl=[],lt,s='y=',i,n,l;
+	for(i=0; i<t; i++) {
 		tl[i]=n=pGet(p,t-i-1); s+='+'+n+'x^'+(t-i-1); //Build String
-		n=Math.abs(n); if((l==null || n<l) && n!=0) l=n,lt=i; //Find Lowest Term
+		n=AB(n); if((l==null || n<l) && n!=0) l=n,lt=i; //Find Lowest Term
 	}
 	//Test Factors
 	let fl=LF(tl[lt]),f,ft=[],xm=1;
@@ -263,8 +260,8 @@ if(T=='r') {
 		if(f) { msg("GCF Found!"); break; }
 	}
 	//Calculate GCF of X
-	for(let i=t-1; i>=0; i--) if(ft[i]) { xm=t-i; break; }
-	s=''; for(let i=0; i<t; i++) s+='+'+ft[i]+'x^'+(t-i-xm); //Build String
+	for(i=t-1; i>=0; i--) if(ft[i]) { xm=t-i; break; }
+	s=''; for(i=0; i<t; i++) s+='+'+ft[i]+'x^'+(t-i-xm); //Build String
 	xm-=1, f+='x^'+xm; msg(`\nGCF of X: ${xm}\n`,PS(`${f}(${s})`,1));
 	if(t-xm==3) msg(PS(f+await run([0,0,'q',s,1]),1));
 } else if(T=='mp') { //Multiply Poly
