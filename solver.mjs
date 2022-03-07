@@ -4,12 +4,11 @@ const msg=console.log, use=(t,u) => msg("Usage:",t,u),
 rl=rdl.createInterface(process.stdin, process.stdout),
 read=q => new Promise(r=>{rl.question(q+' ',n=>r(n))}),
 RN=n => {try {n=eval(n)} catch(e) {n=null} if(typeof n!='number') throw "NaN!"; return n},
-AB=Math.abs, NA=Number.isFinite, getN=q => read(q).then(RN), //Get Num
+getN=q => read(q).then(RN), NA=Number.isFinite, IN=Number.isInteger, AB=Math.abs,
 LF=n => {let f=[],i=1; for(n=AB(n); i<=n; i++) if(n%i==0) f.push(i); return f}, //List Factors
-aPct=(a,p) => { //Percentile
-	if(Number.isInteger(p=(a.length-1)*p/100)) return a[p];
-	return (a[Math.floor(p)]+a[Math.ceil(p)])/2;
-}
+aPct=(a,p) => IN(p=(a.length-1)*p/100)?a[p]:(a[Math.floor(p)]+a[Math.ceil(p)])/2, //Percentile
+root=(x,n)=>(x>1||x<-1)&&0==n?1/0:(x>0||x<0)&&0==n?1:x<0&&n%2==0?`${(x<0?-x:x)**(1/n)}i`:3==n
+	&&x<0?-Math.cbrt(-x):x<0?-((x<0?-x:x)**(1/n)):3==n&&x>0?Math.cbrt(x):(x<0?-x:x)**(1/n);
 
 //From Utils.js
 Array.prototype.each = function(fn,st,en) {
@@ -17,7 +16,7 @@ Array.prototype.each = function(fn,st,en) {
 	for(; i<l; i++) if((r=fn(this[i],i,l))=='!') this.splice(i--,1),l--; else if(r!=null) return r;
 }
 
-function tstRng(n,f,min,max,stp) {
+/*function tstRng(n,f,min,max,stp) {
 	msg("Test",n,min,'->',max);
 	let x,xm,xx,y,ym,ymx,yx,yxx,yl;
 	for(x=min; x<=max; x+=stp) {
@@ -35,21 +34,24 @@ function tstRng(n,f,min,max,stp) {
 async function getF(A) {
 	let f=A[3]||await read("Formula?"); msg('Formula:',f);
 	f=new Poly(f).s(1); msg(f+'\n'); return eval('x=>'+f);
-}
+}*/
 
 //============================================== Polynomial Lib ==============================================
 
-const PT=/[^\d.a-z()/*^+=-\s]/, DN=/^-\s*-/,
-TS=/(?:^|\(|(?:[+=-]\s*){1,2})(?:\((?:\([^()]+\)|[^()])+\)|[/*^]\s*-?|[^()/*^+=-]+)+/g,
-DP=/([*/])?\s*(-?\s*(?:[\d.]+|(?:sqrt)?\((?:\([^()]+\)|[^()])+\)|[a-z]))(?:\^(-?[a-z]|-?[\d.]+))?/g,
+const PT=/[^\d.a-z()/*^+<=>-\s]/,
+DN=/^-\s*-/, ST='(-?\\s*(?:[\\d.]+|(?:sqrt|abs)?\\((?:\\([^()]+\\)|[^()])+\\)|[a-z]))',
+TS=/([<>]=?|=)?\s*(?:[+-]\s*){0,2}(?:\((?:\([^()]+\)|[^()])+\)|[/*^]\s*-?|[^()/*^+<=>-]+)+/g,
+DP=new RegExp(`([*/])?\\s*${ST}(?:\\^${ST})?`,'g'),
 NM=(n,sb,p) => n==1?'':(sb||'')+(n==-1&&!p?'-':n), XP=(p,x) => p?x+NM(p,'^',1):'',
+FR=x => {for(let n=x,v; n>0; n--) if(IN(v=Math.sqrt(n)) && IN(x/n)) return v},
 inv=x => NA(x)?-x:x.startsWith('-')?x.substr(1):'-'+x;
+
 class Poly {
 	constructor(f) {
 		this.t=[]; if(Array.isArray(f)) {this.t=f;return}
 		let m,q; if(PT.test(f)) throw "Bad Poly";
 		for(m of f.matchAll(TS)) {
-			if(m[0].startsWith('=')) q=2; else if(q) q=1;
+			if(m[1]) q=m[1]; else if(q) q=1;
 			m=new Term(m[0],q); if(m.d.length) this.t.push(m);
 		}
 	}
@@ -60,10 +62,13 @@ class Poly {
 		this.t.each((t,i) => {d[i]=t.copy().simp()});
 		for(; i<d.length; i++) {
 			t=d[i], d.each(n => {if(t.mat(n)) return t.e+=n.e,'!'},i+1);
-			if(!t.e && i && t.q!=2) d.splice(i--,1); //Delete 0s
+			if(t.e==0 && (!t.q||t.q==1||i<d.length-1)) {
+				d.splice(i--,1); if(t.q&&t.q!=1) d[i+1].q=t.q;
+			}
 		}
 		d.each(t => {t.simp()}); //2nd Cycle
-		return new Poly(d.length?d:'0');
+		if(!d[0]||d[0].q) d.splice(0,0,new Term(0));
+		return new Poly(d);
 	}
 	lt(q) { //Leading Term
 		let l; this.t.each(t => {if((!l || t.xp()>l.xp()) && (!t.q)==(!q)) l=t}); return l;
@@ -85,17 +90,27 @@ class Term {
 			d.splice(0,0,new SubTerm(m?-1:1));
 		}
 	}
-	s(t,j) {//l!=1 && !div
-		let m=this,d=m.d,n=AB(m.e)==1&&d.length>1&&d[1].p>0,s='';
-		d.each((t,i) => {s+=t.s(j,i)},1); s=d[0].s(j,0,n)+(j&&n?s.substr(1):s);
-		return m.q==2?' = '+s:t?m.e<0?' - '+s.substr(1):' + '+s:s;
+	s(t,j) {
+		let m=this,d=m.d,n=AB(m.e)==1&&d.length>1&&!(d[1].p<0),s='';
+		d.each((t,i) => {s+=t.s(j,i)},1); s=d[0].s(j,0,n)+(n&&s.startsWith('*')?s.substr(1):s);
+		return m.q&&m.q!=1?` ${m.q} `+s:t?m.e<0?' - '+s.substr(1):' + '+s:s;
 	}
 	toString() {return this.s()}
 	simp() {
 		let d=this.d;
-		for(let i=0,s; i<d.length; i++) if((s=d[i]).pr) { //Simp Par
-			let p=s.pr.simp(),t=p.t,n=t[0]; if(s.ps.length==1 && t.length==1) {
-				if(s.p<0) n.d.each(s => {s.p=inv(s.p)}); d.splice.apply(d,([i--,1]).concat(n.d));
+		for(let i=0,s; i<d.length; i++) if((s=d[i]).pr && NA(s.p)) { //Simp Par
+			let p=s.pr.simp(),t=p.t,n=t[0];
+			if(s.ps.length==1 && t.length==1 && (s.p==1||!n.d.each(m => NA(m.p)?null:1))) {
+				n.d.each(m => {m.p*=s.p}); d.splice.apply(d,([i--,1]).concat(n.d));
+			} else if(s.ps=='sqrt(' && t.length==1) { //Simp Sqrt
+				let e=n.e,x=FR(AB(e)),r=AB(e/x/x); x=[s.copy(x||0)];
+				if(r>1) x[1]=s.copy(`sqrt(${r})`); //Remainder
+				n.d.each(m => {
+					if(m.p>1&&!(m.p%2)) x.push((m.p/=2)>1?m:s.copy(`abs(${m.s()})`));
+					else x.push(s.copy(`sqrt(${m.s()})`));
+				},1);
+				if(e<0) x.push(s.copy('i')); //Complex
+				d.splice.apply(d,([i,1]).concat(x)); i+=x.length-1;
 			} else d[i]=s.copy(s.ps+p.s()+')');
 		}
 		let e=this.e,v={},x,n; d.each((s,i) => {
@@ -137,7 +152,7 @@ class Term {
 		if(!this.mat(b)) throw "Cannot add "+b+" to "+this;
 		let t=this.copy(this.d.concat()); t.e+=s?-b.e:b.e; return t;
 	}
-	copy(d) {let n=new Term(d||this.d,this.q);return n}
+	copy(d) {return new Term(d||this.d,this.q)}
 }
 class SubTerm {
 	constructor(x,p,d) {
@@ -150,13 +165,13 @@ class SubTerm {
 		}
 	}
 	s(j,i,n) {
-		let m=this,x=m.x,d=m.p<0,p=AB(m.p)||m.p; if(m.e==0) x=0;
-		if(m.pr) x=(m.n?'-':'')+(j&&m.ps.length>1?'Math.':'')+m.ps+m.pr.s(j)+')';
-		x=j?(p==1?x:'Math.pow('+x+','+p+')') : XP(p,x);
-		return (d?'/':i&&(j||NA(m.e)||m.n)?'*':'')+(!i&&n?NM(m.e):x);
+		let m=this,x=m.x,d=m.p<0,p=AB(m.p)||m.p,s=m.ps&&m.ps.length>1;
+		if(m.e==0) x=0; if(m.pr) x=(m.n?'-':'')+(j&&s?'Math.':'')+m.ps+m.pr.s(j)+')';
+		if(j&&!NA(m.e)&&x.length==1) x='v.'+x; x=j?p==1?x:x+'**'+p:XP(p,x);
+		return (d?'/':i&&(j||NA(m.e)||m.n||s)?'*':'')+(!i&&n?NM(m.e):x);
 	}
 	copy(x) {return new SubTerm(x==null?this.x:x,this.p)}
-	mat(s) {let m=this;return m.p==s.p && (m.p<0?m.x==s.x:m.xp==s.xp)}
+	mat(s) {let m=this;return m.p==s.p && (m.p<0?m.e==s.e:1) && m.xp==s.xp}
 }
 
 function pMul(a,b) { //Multiply Polynomials
@@ -188,17 +203,15 @@ function pGet(p,e,q) {return p.t.each(t => t.xp()==e&&t.q==q?t.e:null)||0} //Get
 //============================================== Code ==============================================
 
 const ML = {
-	r:'Run Matrix', p:'Poly Info', q:'Quadratic Solver',
-	lf:'List Factors', f:'Factor Poly', mp:'Multiply Poly', //dp:'Divide Poly',
-	sr:'Square Rule', tp:'Two-Point Solver', ps:'Point-Slope Solver', es:'Equation System Solver',
-	/*qv:'Quadratic to Vertex Form', vq:'Vertex Form to Quadratic',
-	u:'Formula Evaluator', dr:'Domain/Range Check'*/
-	a:'Dataset Analysis'
-	//, h:'Histogram'
+	r:'Run', p:'Poly Info', lf:'List Factors', f:'Factor Poly', mp:'Multiply Poly', //dp:'Divide Poly',
+	sr:'Square Rule', tp:'Two-Point Solver', ps:'Point-Slope Solver', es:'Equation System',
+	q:'Quadratic Solver', qv:'Quadratic to Vertex Form', //vq:'Vertex Form to Quadratic',
+	rt:'Root',
+	/*u:'Formula Evaluator', dr:'Domain/Range Check'*/ a:'Dataset Analysis'//, h:'Histogram'
 }, CS=/(?:^|\s+)("[^"]+"|\S+)/g, CC='`';
 
 let MS='',n; for(let k in ML) MS+=(MS?','+(n?' ':'\n'):'')+CC+k+' = '+ML[k], n=!n;
-msg("Pecacheu's Math Solver v1.6.3"); await run(process.argv);
+msg("Pecacheu's Math Solver v1.6.4"); await run(process.argv);
 
 async function runCmd(s) {
 	let c=[0,0],m; while(m=CS.exec(s)) {
@@ -213,32 +226,23 @@ if(!T) T='r'; else if(T=='?') return msg(MS);
 msg(ML[T]?`Mode: ${ML[T]}\n`:"Not supported!");
 if(T=='r') {
 	msg("Type '?' for help, 'q' to quit.");
-	let f,r,V,S; while((f=(await read('>')).trim())!='q') try {
+	let f,r,v={},S; while((f=(await read('>')).trim())!='q') try {
 		if(f=='?') msg(MS); else if(f.startsWith(CC)) await runCmd(f.substr(1));
 		else f.split(';').each(s => {
-			if(s=='simp') msg("Simplify",(S=!S)?"On":"Off");
-			else if(S) msg(new Poly(s).simp().s()); else {
-				s=new Poly(s).s(1); try{r=eval.call(V,s)}
-				catch(e) {r=e.toString()} msg(s,'->',r);
+			if(s=='simp') msg("Simplify",(S=S==1?0:1)?"On":"Off");
+			else if(s=='sx') msg("Simp X",(S=S==2?0:2)?"On":"Off");
+			else if(s=='code') msg("Code",(S=S==3?0:3)?"On":"Off");
+			else if(s=='vars') msg(v); else if(S && (S<2||S==2&&s.indexOf('=')==-1))
+				msg((S==2?"f(x) = ":'')+new Poly(S==2&&NA(v.x)?s.replace(/x/g,' '+v.x+' '):s).simp().s());
+			else {
+				if(S!=3) s=new Poly(s).s(1); try{r=eval(s)} catch(e) {r=e.toString()} msg(s,'->',r);
 			}
 		});
-	} catch(e) {msg('->',e.toString())}
+	} catch(e) {msg('->'+e)}
 } else if(T=='p') { //Poly Info
 	if(AL!=4) return use(T,"<poly>");
 	let p=new Poly(A[3]).simp(), t=p.lt();
 	msg(p+"\nDegree:",t.xp(),"Lead Term: "+t);
-} else if(T=='q') { //Quad Solve
-	let p=A[3]?new Poly(A[3]).simp():0;
-	if(AL<4 || p.lt().xp()>2) return use(T,"<ax^2 + bx + c = y>");
-	let a=pGet(p,2), b=pGet(p,1), c=pGet(p,0), y=pGet(p,0,1),
-	n=b/(2*a), ns=PS(`${b}^2/${2*a}^2`,2), yca=PS(`${y-c}/${a}`,2), ycn=PS(`${yca}+${ns}`,2),
-	xs=PS(`${b}/${2*a}`,2), xb=PS(`x+${xs}`), na=Math.sqrt((y-c)/a+Math.pow(n,2));
-
-	msg(p.s(),PS(`${a}x^2+${b}x=${y-c}`,1),PS(`x^2+${b}x/${a}=${yca}`,3));
-	msg(PS(`x^2+${b}x/${a}+${ns}=${yca}+${ns}`),`(Add (b/2a)^2 = ${ns} to both sides)`);
-	msg(`(${xb})^2 = ${ycn} (Apply square rule)\n${xb} = +/-sqrt(${ycn})`);
-	msg(PS(`x=sqrt(${ycn})-${xs}`,2)+';',PS(`x=-sqrt(${ycn})-${xs}`,2));
-	if(A[4]) return `(x+${na-n})(x+${-na-n})`; msg(`x = ${na-n}; x = ${-na-n}`);
 } else if(T=='lf') { //List Factors
 	if(AL!=4) return use(T,"<x>");
 	msg("Factors:",LF(RN(A[3])));
@@ -255,23 +259,52 @@ if(T=='r') {
 	for(let fc=fl.length,fn=fc-1,i; fn>=0; fn--) {
 		f=fl[fn]; msg("Testing",f); for(i=0; i<t; i++) {
 			ft[i]=tl[i]/f; msg(tl[i]+'/'+f+' = '+ft[i]);
-			if(!Number.isInteger(ft[i])) { msg("Not Integer!"),f=0; break; }
+			if(!IN(ft[i])) { msg("Not Integer!"),f=0; break; }
 		}
 		if(f) { msg("GCF Found!"); break; }
 	}
 	//Calculate GCF of X
 	for(i=t-1; i>=0; i--) if(ft[i]) { xm=t-i; break; }
 	s=''; for(i=0; i<t; i++) s+='+'+ft[i]+'x^'+(t-i-xm); //Build String
-	xm-=1, f+='x^'+xm; msg(`\nGCF of X: ${xm}\n`,PS(`${f}(${s})`,1));
-	if(t-xm==3) msg(PS(f+await run([0,0,'q',s,1]),1));
+	xm-=1, f+='x^'+xm; msg(`\nGCF of X: ${xm}\n`,PS(`${f}(${s})`,3));
+	if(t-xm==3) msg(PS(f+await run([0,0,'q',s,1]),3));
 } else if(T=='mp') { //Multiply Poly
 	if(AL!=5) return use(T,"<p1> <p2>");
-	let p1=new Poly(A[3]), p2=new Poly(A[4]); msg(`(${p1}) * (${p2})\n\nFOIL Multiply:`);
+	let p1=new Poly(A[3]).simp(), p2=new Poly(A[4]).simp(); msg(`(${p1}) * (${p2})\n\nFOIL Multiply:`);
 	let m=pMul(p1,p2,1); msg('\n'+m+'\nSimplify: '+m.simp());
 }/* else if(T=='dp') { //Divide Poly
 	if(AL!=5) return use(T,"<p1> <p2>");
 	let p1=new Poly(A[3]), p2=new Poly(A[4]); msg(`(${p1}) / (${p2})\n\nDivide:`);
 	let m=pDiv(p1,p2,1); msg('\n'+m+'\nSimplify: '+m.simp());
+} */else if(T=='q') { //Quad Solve
+	let p=A[3]?new Poly(A[3]).simp():0;
+	if(AL<4 || p.lt().xp()>2) return use(T,"<ax^2 + bx + c = y>");
+	let a=pGet(p,2), b=pGet(p,1), c=pGet(p,0), y=pGet(p,0,'='),
+	n=b/(2*a), ns=PS(`${b}^2/${2*a}^2`,2), yca=PS(`${y-c}/${a}`,2), ycn=PS(`${yca}+${ns}`,2),
+	xs=PS(`${b}/${2*a}`,2), xb=PS(`x+${xs}`), na=Math.sqrt((y-c)/a+Math.pow(n,2));
+
+	msg(p.s(),PS(`${a}x^2+${b}x=${y-c}`,1),PS(`x^2+${b}x/${a}=${yca}`,3));
+	msg(PS(`x^2+${b}x/${a}+${ns}=${yca}+${ns}`),`(Add (b/2a)^2 = ${ns} to both sides)`);
+	msg(`(${xb})^2 = ${ycn} (Apply square rule)\n${xb} = +/-sqrt(${ycn})`);
+	msg(PS(`x=sqrt(${ycn})-${xs}`,2)+';',PS(`x=-sqrt(${ycn})-${xs}`,2));
+	if(A[4]) return `(x-${na-n})(x-${-na-n})`; msg(`x = ${na-n}; x = ${-na-n}`);
+} else if(T=='qv') { //Quad to Vertex
+	msg("y = ax^2 + bx + c");
+	let a=await getN("ax^2?"), b=await getN("bx?"), c=await getN("c?"),
+	ca=`+${c}/${a}`, ns=PS(`${b}^2/${2*a}^2`,2), xs=`(x+${ns})^2`;
+
+	msg(PS(`y=${a}x^2+${b}x+${c}`,1),a==1?'':PS(`y/${a}=x^2+${b}x/${a}${ca}`,1));
+	msg(PS(`y/${a}+${ns}=x^2+${b}x/${a}+${ns}${ca}`),`(Add (b/2a)^2 = ${ns} to both sides)`);
+	msg(PS(`y/${a}+${ns}=${xs}${ca}`),'(Apply square rule)',PS(`y/${a}=${xs}${ca}-${ns}`,1));
+	msg(PS(`y=${a}${xs}+${c}-${a}*${ns}`,2),`\nVertex: (${PS('-'+ns)}, ${c-Math.pow(b/(2*a),2)*a})`);
+}/* else if(T=='vq') { //Vertex to Quad
+	msg("y = a(x - h)^2 + k");
+	let a=await getN("A?"), h=await getN("H?"),
+	k=await getN("K?"), as=NM(a), h2=Math.pow(h,2);
+
+	msg(`\ny = ${as}(x ${NS(-h)})^2 ${NS(k)}`);
+	msg(`y = ${as}x^2 ${NS(-h*a*2)}x ${NS(h2*a)} ${NS(k)}`);
+	msg(`y = ${as}x^2 ${NS(-h*a*2)}x ${NS(h2*a+k)}`);
 } */else if(T=='sr') { //Square Rule
 	if(AL!=4) return use(T,"<poly>");
 	let p=new Poly(A[3]),p2; if(p.t.length != 2) throw "Must be two terms!";
@@ -308,30 +341,7 @@ if(T=='r') {
 		msg(PS(xf),`(Cancel out ${b2} and ${b3})`,PS(xf,3),'\nx =',x);
 		msg("\nSolve for Y:\ny =",eq,'\n'+PSS(`y=${nd}/${c}-${ad}*${rq}/${xd*bc}`),`\n\nSolution: (${x},${y})`);
 	}
-}/* else if(T=='qv') { //Quad to Vertex
-	msg("y = ax^2 + bx + c");
-	let a=await getN("ax^2?"), b=await getN("bx?"), c=await getN("c?"),
-	ad=NM(a,'/'), h=b/(2*a), h2=Math.pow(h,2), k=c-h2*a;
-
-	msg(`\ny = ${NM(a)}x^2 ${NS(b)}x ${NS(c)}`);
-	if(ad) msg(`y${ad} = x^2 ${NS(b)}x${ad} ${NS(c)}${ad}`);
-	msg(`y${ad} + ${h2} = x^2 ${NS(b/a)}x + ${h2} ${NS(c)}${ad} (Add (b/2a)^2 = ${h2} to both sides)`);
-	msg(`y${ad} + ${h2} = (x ${NS(h)})^2 ${NS(c)}${ad} (Apply square rule)`);
-	msg(`y${ad} = (x ${NS(h)})^2 ${NS(c/a)} - ${h2}`);
-	msg(`y = ${NM(a)}(x ${NS(h)})^2 ${NS(k)}`);
-	msg(`Vertex: (${-h},${k})`);
-} else if(T=='vq') { //Vertex to Quad
-	msg("y = a(x - h)^2 + k");
-	let a=await getN("A?"), h=await getN("H?"),
-	k=await getN("K?"), as=NM(a), h2=Math.pow(h,2);
-
-	msg(`\ny = ${as}(x ${NS(-h)})^2 ${NS(k)}`);
-	msg(`y = ${as}x^2 ${NS(-h*a*2)}x ${NS(h2*a)} ${NS(k)}`);
-	msg(`y = ${as}x^2 ${NS(-h*a*2)}x ${NS(h2*a+k)}`);
-} else if(T=='u') {
-	let f=await getF(A), x=await getN("\nSolve N?");
-	msg("Result:",f(x));
-} else if(T=='dr') {
+} /*else if(T=='dr') {
 	const TMax=5000000, TStp=50, SStp=.1;
 	let f=await getF(A), t=tstRng('Scan',f,-TMax,TMax,TStp); msg(t);
 	t=[t[0]==null?'(-infinity':'['+tstRng('X-Min',f,t[0]-TStp,t[0]+TStp,SStp)[0],
@@ -339,8 +349,11 @@ if(T=='r') {
 		t[2]==null?'(-infinity':'['+tstRng('Y-Min',f,t[3]-TStp,t[3]+TStp,SStp)[2],
 		t[4]==null?'infinity)':tstRng('Y-Max',f,t[5]-TStp,t[5]+TStp,SStp)[4]+']'];
 	msg(`Domain: ${t[0]},${t[1]}; Range: ${t[2]},${t[3]}`);
-} */else if(T=='a') { //Dataset Analysis
-	if(AL < 4) return use(T,"<data> [frac]");
+} */else if(T=='rt') {
+	if(AL!=5) return use(T,"<x> <n>");
+	msg(eval(`root(${A[3]},${A[4]})`));
+} else if(T=='a') { //Dataset Analysis
+	if(AL<4) return use(T,"<data> [frac]");
 	let a=A[3].split(/[;,]/g),b,l=a.length,rf=[],cf=0,cr=[],t=0,o={},k,m;
 	//Calc Averages:
 	a.each((n,i) => {t+=(a[i]=n=Number(n.replace(/[$:]/g,'')));o[n]?o[n]++:o[n]=1});

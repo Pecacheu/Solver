@@ -5,11 +5,14 @@ But, while still a single-file Node.js program with no depends, at this point it
 
 Btw any formulas in here are 100% figured out by my dumb Rai butt as I read through my textbooks, so accuracy is *not* guaranteed, but I do test things with as many weird examples as I can come up with. (Yeah... At this point you could say it's more work than just doing my homework, and you'd be right! But c'mon where's the fun in that?)
 
-#### In Run Matrix Mode (Default)
-- Type `?` for command list.
+#### In RUN Mode (Default)
+- Type `?` for command list
 - Run a command with `` `<cmd> [arg1] [arg2]...`` *(Can enclose args in quotes)*
-- Set a variable (a-z) like `x = 2*3` -> `x = 6`
-- Solve a formula like `(x^2 + 6)/3` -> 14
+- Set a variable (a-z) ex `x = 2*3` -> `x = 6`
+- Delete a variable with `del <name>`
+- Solve a formula ex `(x^2 + 6)/3` -> 14
 - Enable Simplify mode with `simp`
-- Then simplify a formula like `x^3 + 4x^3` -> `5x^3`
-- Type `q` to quit.
+- Then simplify a formula ex `x^3 + 4x^3` -> `5x^3`
+- `sx` = Simplify X mode *(Simp mode but with substitution for X)*
+- `code` = Code mode *(Allows direct eval of JavaScript)*
+- Type `q` to quit
