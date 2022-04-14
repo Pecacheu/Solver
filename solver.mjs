@@ -9,12 +9,15 @@ LF=n => {let f=[],i=1; for(n=abs(n); i<=n; i++) if(n%i==0) f.push(i); return f},
 aPct=(a,p) => IN(p=(a.length-1)*p/100)?a[p]:(a[Math.floor(p)]+a[Math.ceil(p)])/2, //Percentile
 log=(b,x)=>b==2?Math.log2(x):b==10?Math.log10(x):Math.log(x)/(b?Math.log(b):1),
 root=(x,n)=>(x>1||x<-1)&&0==n?1/0:(x>0||x<0)&&0==n?1:x<0&&n%2==0?`${(x<0?-x:x)**(1/n)}i`:3==n
-	&&x<0?-Math.cbrt(-x):x<0?-((x<0?-x:x)**(1/n)):3==n&&x>0?Math.cbrt(x):(x<0?-x:x)**(1/n);
+	&&x<0?-Math.cbrt(-x):x<0?-((x<0?-x:x)**(1/n)):3==n&&x>0?Math.cbrt(x):(x<0?-x:x)**(1/n),
+sin=Math.sin, cos=Math.cos, tan=Math.tan,
+sec=x=>1/cos(x), csc=x=>1/sin(x), cot=x=>1/tan(x),
+asin=Math.asin, acos=Math.acos, atan=Math.atan;
 
 //From Utils.js
 Array.prototype.each = function(fn,st,en) {
 	let i=st||0,l=this.length,r; if(en) l=en<0?l-en:en;
-	for(; i<l; i++) if((r=fn(this[i],i,l))=='!') this.splice(i--,1),l--; else if(r!=null) return r;
+	for(; i<l; i++) if((r=fn(this[i],i,l))==='!') this.splice(i--,1),l--; else if(r!=null) return r;
 }
 
 /*function tstRng(n,f,min,max,stp) {
@@ -39,15 +42,19 @@ async function getF(A) {
 
 //============================================== Polynomial Lib ==============================================
 
-const PT=/[^\d.a-z()/*^+<=>%-\s]/, EQ=/[<=>]+/,
-DN=/^-\s*-/, ST='(-?\\s*(?:[\\d.]+%?|(?:sqrt|abs|ln|log[\\d]*)?\\((?:\\([^()]+\\)|[^()])+\\)|[a-z]))',
-TS=/([<>]=?|=)?\s*(?:[+-]\s*){0,2}(?:\((?:\([^()]+\)|[^()])+\)|[/*^]\s*-?|[^()/*^+<=>-]+)+/g,
+const PAR='\\((?:\\((?:\\((?:\\((?:\\([^()]+\\)|[^()])+\\)|[^()])+\\)|[^()])+\\)|[^()])+\\)',
+PT=/[^\d.a-z()/*^+<=>%-\s]/, EQ=/[<=>]+/,
+FL='sqrt|abs|sin|cos|tan|sec|csc|cot|asin|acos|atan|ln|log[\\d]*',
+DN=/^-\s*-/, ST=`(-?\\s*(?:[\\d.]+%?|(?:${FL})?${PAR}|[a-z]))`,
+TS=new RegExp(`([<>]=?|=)?\\s*(?:[+-]\\s*){0,2}(?:${PAR}|[/*^]\\s*-?|[^()/*^+<=>-]+)+`,'g'),
 DP=new RegExp(`([*/])?\\s*${ST}(?:\\^${ST})?`,'g'),
 NM=(n,sb,p) => n==1?'':(sb||'')+(n==-1&&!p?'-':n), XP=(p,x) => p?x+NM(p,'^',1):'',
-FR=x => {for(let n=x,v; n>0; n--) if(IN(v=sqrt(n)) && IN(x/n)) return v},
-NG=x => NA(x)?x<0:x.startsWith('-'), JX=(x,p) => x=='e'?`Math.exp(${p})`:
+FR=x => {for(let n=x,v; n>0; n--) if(IN(v=sqrt(n)) && IN(x/n)) return v}, //Factor root
+NG=x => NA(x)?x<0:x.length&&x.startsWith('-'), JX=(x,p) => x=='e'?`Math.exp(${p})`:
 	(x=isFinite(x)||x.length!=1?x:x=='p'?'Math.PI':'v.'+x, p==1?x:`(${x}**${p})`),
-SFL=s => (s[0]=='<'?'>':s[0]=='>'?'<':s[0])+s.substr(1); //Sign flip
+SFL=s => (s[0]=='<'?'>':s[0]=='>'?'<':s[0])+s.substr(1), //Sign flip
+//GCD=(a,b) => {let t; while(b) t=b, b=a%b, a=t; return a}, //Greatest Common Denominator
+PEQ=(a,b) => a.pn==b.pn&&(a.p.s&&b.p.s?a.p.s()==b.p.s():a.p==b.p); //Power Equals
 
 class Poly {
 	constructor(f) {
@@ -61,20 +68,40 @@ class Poly {
 	s(j) {let s='';this.t.each((t,i) => {s+=t.s(i,j)});return s}
 	toString() {return this.s()}
 	simp() { //Simplify
-		let d=[],i=0,t,r,s,q;
-		this.t.each((t,i) => {d[i]=t.copy().simp()});
+		let d=[],i=0,t,r,s,q,dq;
+		this.t.each((t,i) => {d[i]=t.copy().simp();if(t.q)dq=1});
 		for(; i<d.length; i++) {
-			t=d[i], d.each(n => {if(t.mat(n)) return t.e+=n.e,'!'},i+1);
+			t=d[i], q=t.d.each(s => s.pn||null);
+			if(d.each((n,v) => {
+				if((q || n.d.each(s => s.pn||null)) && !n.q==!t.q) { //Simp Frac
+					let an='',ad='',bn='',bd='';
+					t.d.each(s => {if(s.pn) s.inv(),ad+=s.s()+' '; else an+=s.s()+' '});
+					n.d.each(s => {if(s.pn) s.inv(),bd+=s.s()+' '; else bn+=s.s()+' '});
+					d[i]=r=new Term(`(${an+bd}+${bn+ad})`);
+					msg("DIV SIMP",`(${an+bd}+${bn+ad})`,r.s());
+					new Term(ad+bd).d.each(s => {s.inv(),r.d.push(s)});
+					msg("DS DONE",r.s());
+					return d.splice(v,1),1;
+				}
+				if(t.like(n)) return t.e+=n.e,'!'; //Combine Like-Terms
+			},i+1)) continue;
 			if(t.e==0 && (!t.q||t.q==1||i<d.length-1)) {
 				d.splice(i--,1); if(t.q&&t.q!=1) d[i+1].q=t.q;
 			}
-			if(t.d.length==2 && (r=t.d[1]).pr && r.p==1 && ((s=(r.ps=='sqrt(' && !i
-				&& (!d[1] || d[1].q))) || abs(t.e)==1 && r.ps.length==1)) {
-				if(s) {
-					s='',q=d[1]&&d[1].q; d.each(n => {n.e*=t.e,n.q=0,s+=' '+n},1);
-					(s=new Term((t.e<0?'-':'')+`(${s})^2`)).q=t.e<0?SFL(q):q; d=[s];
-				} else if(t.e<0) r.pr.t.each(n => {n.e=-n.e});
-				d.splice.apply(d,([i--,s?0:1]).concat(r.pr.t));
+			if(t.d.length==2 && (r=t.d[1]).pr) {
+				if(dq && r.p==1 && ((s=(r.ps=='sqrt(' && !i && (!d[1] || d[1].q)))
+					|| abs(t.e)==1 && r.ps.length==1)) {
+					if(s) { //Invert Sqrt
+						s='',q=d[1]&&d[1].q; d.each(n => {n.e*=t.e,n.q=0,s+=' '+n},1);
+						(s=new Term((t.e<0?'-':'')+`(${s})^2`)).q=t.e<0?SFL(q):q; d=[s];
+					} else if(t.e<0) r.pr.t.each(n => {n.e=-n.e}); //Remove Par
+					d.splice.apply(d,([i--,s?0:1]).concat(r.pr.t));
+				} else if(r.ps.startsWith('l')) { //Simp Log Terms
+					d.each(n => { if(n.d.length>1 && n.d[1].ps==r.ps && PEQ(n,t)) {
+						r.pr=new Poly(`(${r.pr})^${t.e}(${n.d[1].pr})^${n.e}`).simp();
+						t.e=1; return '!';
+					}},i+1);
+				}
 			}
 		}
 		d.each(t => {t.simp()}); //2nd Cycle
@@ -96,54 +123,56 @@ class Term {
 		}
 		if(!d[0]) return;
 		Object.defineProperty(this,'e',{get:()=>d[0].e, set:n=>d[0]=d[0].copy(n)});
-		if(!NA(this.e) || d[0].p!=1) d.splice(0,0,new SubTerm(d[0].n?-1:1)),d[1].n=0;
+		if(!NA(this.e) || d[0].np()!=1) d.splice(0,0,new SubTerm(d[0].n?-1:1)),d[1].n=0;
 	}
 	s(t,j) {
 		let m=this,d=m.d,n=abs(m.e)==1&&d.length>1&&!d[1].pn,s='';
 		d.each((t,i) => {s+=t.s(j,i)},1); s=d[0].s(j,0,n)+(n&&s.startsWith('*')?s.substr(1):s);
-		return m.q&&m.q!=1?` ${m.q} `+s:t?m.e<0?' - '+s.substr(1):' + '+s:s;
+		return m.q&&m.q!=1?` ${m.q} `+s:t?m.e<0||m.n?' - '+s.substr(1):' + '+s:s;
 	}
 	toString() {return this.s()}
 	simp() {
 		let d=this.d;
-		for(let i=0,s; i<d.length; i++) if((s=d[i]).pr) { //Simp Par
+		for(let i=0,s; i<d.length; i++) { if((s=d[i]).p instanceof Poly) { //Simp Pow
+			if((s.p=s.p.simp()).t.length==1 && s.p.t[0].d.length==1) s.sp(s.p.t[0].e*(s.pn?-1:1));
+		} if(s.pr) { //Simp Par
 			let p=s.pr.simp(), t=p.t, n=NA(s.p)&&t.length==1&&t[0];
-			if(n && s.ps.length==1 && (s.p==1||!n.d.each(m => NA(m.p)?null:1))) {
-				n.d.each(m => m.sp(m.p*s.p)); d.splice.apply(d,([i--,1]).concat(n.d));
+			if(n && s.ps.length==1 && (s.np()==1||!n.d.each(m => NA(m.p)?null:1))) {
+				n.d.each(m => m.sp(m.np()*s.np())); d.splice.apply(d,([i--,1]).concat(n.d));
 			} else if(n && s.ps=='sqrt(') { //Simp Sqrt
 				let e=n.e,x=FR(abs(e)),r=abs(e/x/x); x=[s.copy(x||0)];
 				if(r>1) x[1]=s.copy(`sqrt(${r})`); //Remainder
 				n.d.each(m => {
-					if(m.p>1&&!(m.p%2)) x.push((m.p/=2)>1?m:s.copy(`abs(${m.s()})`));
+					if(m.np()>1&&!(m.p%2)) x.push((m.p/=2)>1?m:s.copy(`abs(${m.s()})`));
 					else x.push(s.copy(`sqrt(${m.s()})`));
 				},1);
 				if(e<0) x.push(s.copy('i')); //Complex
 				d.splice.apply(d,([i,1]).concat(x)); i+=x.length-1;
 			} else d[i]=s.copy(s.ps+p.s()+')');
-		}
+		}}
 		let e=this.e,v={},x,n; d.each((s,i) => {
 			if((n=NA(s.p)) && NA(s.e)) { //Combine Exp
-				(d[i]=s=s.copy(s.e**abs(s.p))).sp(s.pn?-1:1); //Simp Pow <<<<<<<< Todo: FIX. Also, can use s.inv()??
+				(d[i]=s=s.copy(s.e**s.p)).sp(s.pn?-1:1);
 				if(s.pn) {if(x=v['/']) return x.e*=s.e,'!'; v['/']=d[i]=s.copy()}
 				else return e*=s.e,'!';
 			} else { //Combine Like-vars
 				if(s.n) s.n=0,e=-e; //Invert Term
-				if(n) {if(x=v[s.x]) return x.p+=s.p,'!'; v[s.x]=d[i]=s=s.copy()}
+				if(n) {if(x=v[s.x]) return x.sp(x.np()+s.np()),'!'; v[s.x]=d[i]=s=s.copy()}
 			}
 		},1);
 		d.each((s,i) => { //Del 0-Pow & Simp Frac
-			if(!s.p) return '!'; if(s.p==-1) {
+			if(!s.p) return '!'; if(s.np()==-1) {
 				if(s.e==0) e='NaN'; let fa=LF(e), fb=LF(s.e), n=fa.length-1,f;
 				for(; n>=0; n--) if(fb.indexOf(f=fa[n])!=-1) {
-					if(s.e<0) f=-f; e=e/f, d[i]=s.copy(s.e/f); return (s.e/f==1)?'!':null;
+					if(s.e<0) f=-f; e=e/f, d[i]=s.copy(s.e/f); return (s.e/f==1)?'!':null; //TODO: Use GCD instead of LF for speed
 				}
 			}
 		});
 		if(!e || e==='NaN') this.d.splice(1); //Del All
 		this.e=e; return this;
 	}
-	xp(v) {return (v=tSer(this,v||'x'))?v.p:0} //X Power
-	mat(t) { //Check if Terms match
+	xp(v) {return (v=tSer(this,v||'x'))?this.d[v].np():0} //X Power
+	like(t) { //Check if Like-Terms
 		let m=this; if((!m.q)!=(!t.q) || m.d.length!=t.d.length) return 0;
 		return !m.d.each(s => t.d.each(n => n.mat(s)||null)?null:1);
 	}
@@ -155,27 +184,21 @@ class Term {
 		b=b.d.concat(); b.each((t,i) => (b[i]=t.copy()).inv());
 		return this.mul(b);
 	}
-	add(b,s) { //Add/Sub Terms
-		if(typeof b=='number') b=new Term(b);
-		if(!this.mat(b)) throw "Cannot add "+b+" to "+this;
-		let t=this.copy(this.d.concat()); t.e+=s?-b.e:b.e; return t;
-	}
 	copy(d) {return new Term(d||this.d,this.q)}
 }
 class SubTerm {
 	constructor(x,p,d) {
-		let m=this; if(p==0) x=p=1;
-		m.sp(Number(p)||(p?new SubTerm(p,1).s():1)); if(d) m.inv();
+		let m=this; if(p==0) x=p=1; m.sp(p||1); if(d) m.inv();
 		if(typeof x=='number') m.x=abs(m.e=x).toString(),m.n=x<0; else {
-			x=x.replace(/ /g,'');
-			if(x.endsWith('%')) x=(Number(x.substr(0,x.length-1))/100).toString();
-			m.x=x.substr((m.n=NG(x))?1:0);
-			if(!(m.e=Number(x)) && (p=m.x.indexOf('('))!=-1 && x.endsWith(')'))
-				m.ps=m.x.substr(0,p+1),m.pr=new Poly(m.x.substr(p+1,m.x.length-2));
+			m.x=x.replace(/ /g,'');
+			if(m.x.endsWith('%')) m.x=(Number(m.x.substr(0,m.x.length-1))/100).toString();
+			m.e=Number(m.x); m.x=m.x.substr((m.n=NG(m.x))?1:0);
+			if(!m.e && (p=x.indexOf('('))!=-1 && x.endsWith(')'))
+				m.ps=x.substring(m.n?1:0,p+1),m.pr=new Poly(x.substr(p+1,x.length-2));
 		}
 	}
 	s(j,i,n) {
-		let m=this,x=m.x,p=abs(m.p)||m.p.substr(m.pn?1:0),ps=m.ps,s=ps&&ps.length>1;
+		let m=this,x=m.x,p=m.p instanceof Poly?'('+m.p.s(j)+')':m.p,ps=m.ps,s=ps&&ps.length>1;
 		if(m.e==0) x=0; if(ps) { //Parenthesis
 			if(j&&ps.startsWith('log')) ps=`log(${Number(ps.substr(3,ps.length-4)||10)},`;
 			else if(j&&ps=='ln(') ps='log(0,'; x=ps+m.pr.s(j)+')';
@@ -183,10 +206,15 @@ class SubTerm {
 		if(j) p=JX(p,1); return (m.pn?'/':i&&(j||NA(m.e)||m.n||s)?'*':'')
 			+(!i&&n?NM(m.e):(m.n?'-':'')+(j?JX(x,p):XP(p,x)));
 	}
-	sp(p) {this.pn=NG(this.p=p)}
-	inv() {let m=this,p=m.p; m.pn=!m.pn,m.p=NA(p)?-p:NG(p)?p.substr(1):'-'+p}
-	copy(x) {return new SubTerm(x==null?(this.n?'-':'')+this.x:x,this.p)}
-	mat(s) {let m=this;return m.p==s.p && (m.pn?m.e==s.e:1) && ((NA(m.e)&&NA(s.e))||m.x==s.x)}
+	sp(p) {
+		let m=this; if(p instanceof Poly) return m.p=p;
+		m.pn=NG(p); if(!NA(m.p=abs(p))) p=p.substr(m.pn?1:0),
+			m.p=new Poly(p.startsWith('(')&&p.endsWith(')')?p.substr(1,p.length-2):p);
+	}
+	inv() {this.pn=!this.pn}
+	np() {let m=this,p=m.p; return NA(p)?(m.pn?-p:p):(m.pn?'-':'')+p}
+	copy(x) {return new SubTerm(x==null?(this.n?'-':'')+this.x:x,this.np())}
+	mat(s) {let m=this;return PEQ(m,s) && (m.pn?m.e==s.e:1) && ((NA(m.e)&&NA(s.e))||m.x==s.x)}
 }
 
 function pMul(a,b,m) { //Multiply Polynomials
@@ -231,7 +259,7 @@ const ML = {
 }, CS=/(?:^|\s+)("[^"]+"|\S+)/g, CC='`';
 
 let MS='',n; for(let k in ML) MS+=(MS?','+(n?' ':'\n'):'')+CC+k+' = '+ML[k], n=!n;
-msg("Pecacheu's Math Solver v1.6.5"); await run(process.argv);
+msg("Pecacheu's Math Solver v1.6.6"); await run(process.argv);
 
 async function runCmd(s) {
 	let c=[0,0],m; while(m=CS.exec(s)) {
@@ -280,15 +308,15 @@ if(T=='r') { //RUN
 				}
 			})) { //All terms moved
 				if(q=x.each(x => x.t.d.each(s => s.pr&&NA(s.p)&&(x.s=s)||null)?x:null)) { //Paren
-					if(q.s.ps=='abs(' && q.s.p==1) { //Undo Abs
+					if(q.s.ps=='abs(' && q.s.np()==1) { //Undo Abs
 						//TODO: Handle other pow on abs?
 						q.s.ps='(', q.n=new Term(q.t.s()), q.n.e=-q.n.e;
 						(m=new Poly(s2)).t.splice(a.indexOf(q.t),1,q.n), pl.push(m);
 						m="Undo Abs; Split #"+(pl.length-1); continue;
-					} else if(q.s.ps.length==1 && q.s.p>=1) { //Multiply
+					} else if(q.s.ps.length==1 && !q.s.pn) { //Multiply
 						//TODO: If s.pn, then move parenthesis term to other side (s.inv()), pMul on ENTIRE contents of other side (as if enclosed in paren, but saves a processing step)
 						let r=0; m=0; q.t.d.each(s => {
-							r=(s==q.s); if(!m) (r?s.p>1&&--s.p:s.e!=1&&s.p==1&&(!s.ps||s.ps.length==1))?r=2:0;
+							r=(s==q.s); if(!m) (r?s.np()>1&&s.sp(s.np()-1):s.e!=1&&s.np()==1&&(!s.ps||s.ps.length==1))?r=2:0;
 							if(r>1) msg("\nMultiply",q.s.s(),"by",s.s()), m=s.pr||new Poly(s.s());
 							if(r) return '!';
 						});
@@ -296,32 +324,34 @@ if(T=='r') { //RUN
 						else q.t.d.push(q.s); continue;
 					}
 				}
-				if(x.length != 1) { msg("Couldn't solve!"); break; }
+				if(x.length != 1) break; //Couldn't solve!
 				q=(x=x[0]).t.e; if(q!=1) { //Divide Exp
 					a.each(t => {
 						if(t.q && t.q!=1 && q<0) t.q=SFL(t.q); //Flip signs
 						t.d.push(new SubTerm(q,-1));
 					}); //Todo: Divide anything that isn't v, not just exp. Maybe do a search for all non-var SubTerms and divide by all (combine into paren and create new SubTerm), though send to console without the parentheses
 					m="Divide by "+q;
-				} else if(x.s.p != 1) { //Square Pow
+				} else if(x.s.np() != 1) { //Square Pow
 					//Todo: Do something if x.s is in denominator!
-					if(x.s.p != 2) return msg("Can't handle non-square pow yet!");
+					if(x.s.np() != 2) return msg("Can't handle non-square pow yet!");
 					x.s.sp(1), q=a[1].q, m=sGet(s2), s=`sqrt(${m[2]})`;
 					a.splice(1,a.length,new Term(s)), pl.push(new Poly(x.t+SFL(m[0])+'-'+s));
 					a[1].q=q, m="Perfect Square; Split #"+(pl.length-1);
 				}
 			}
 		}
-		if(s!=s2) continue;
-		msg("Done!"); re.push(s), m=sGet(s); q=m[0][0], x=m[0][1];
-		if(q=='>') re.gt=eval(m[2]),re.gq=(x?'[':'(')+m[2];
-		else if(q=='<') re.lt=eval(m[2]),re.lq=m[2]+(x?']':')');
+		m=s==s2?sGet(s):0;
+		if(!m || !s.startsWith(v+' '+m[0])) msg("Couldn't solve!"); else {
+			msg("Done!"); re.push(s); q=m[0][0], x=m[0][1];
+			if(q=='>') re.gt=eval(m[2]),re.gq=(x?'[':'(')+m[2];
+			else if(q=='<') re.lt=eval(m[2]),re.lq=m[2]+(x?']':')');
+		}
 		//Todo: Append multiple gt and lt together for more complex problems? Or just ignore and only give solutions list. Let the user figure that sh*t out.
 	}
 	q=''; if(re.gt >= re.lt) q=`(-infinity, ${re.lq}U${re.gq}, infinity)`;
 	else if(re.gt < re.lt) q=re.gq+', '+re.lq; else if(re.gt != null) q=re.gq+', infinity)';
 	else if(re.lt != null) q='(-infinity, '+re.lq;
-	msg('\n'+re.join('; '),q?'\n'+q:'');
+	if(re.length) msg('\n'+re.join('; '),q?'\n'+q:'');
 } else if(T=='p') { //Poly Info
 	if(AL!=4) return use(T,"<poly>");
 	let p=new Poly(A[3]).simp(), t=p.lt();
