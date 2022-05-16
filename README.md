@@ -19,6 +19,7 @@ Btw any formulas in here are 100% figured out by my dumb Rai butt as I read thro
 
 #### Special Functions (Use in any Poly)
 - `sqrt(x)` = Square Root
+- `cbrt(x)` = Cube Root
 - `abs(x)` = Absolute Value
 - `ln(x)` = Natural Logarithm (Base e)
 - `log(x)` = Common Logarithm (Base 10)
