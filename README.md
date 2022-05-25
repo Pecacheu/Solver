@@ -24,7 +24,8 @@ Btw any formulas in here are 100% figured out by my dumb Rai butt as I read thro
 - `ln(x)` = Natural Logarithm (Base e)
 - `log(x)` = Common Logarithm (Base 10)
 - `logb(x)` = Logarithm (Ex. `log4(x)`)
-- `sin|cos|tan|sec|csc|cot(x)` Sine functions
-- `asin|acos|atan(x)` Arcsine functions
+- `sin|cos|tan|sec|csc|cot(x)` Sine functions (rad)
+- `asin|acos|atan(x)` Arcsine functions (rad)
+- `rad(x)` Convert degrees to radians
 - `p` = Pi (~3.14)
 - `e` = Euler's number (~2.718)

@@ -1,11 +1,21 @@
 import rdl from 'readline';
+import Color from './color.mjs';
 
-const msg=console.log, use=(t,u) => msg("Usage:",t,u),
+function msg() {
+	let a=arguments,l=a.length-1;
+	if(typeof a[l]=='string') a[l]+=Color.Rst;
+	else Array.prototype.push.call(a,Color.Rst);
+	console.log(...a);
+}
+const use=(t,u) => msg(Color.Red+"Usage:",t,u),
 rl=rdl.createInterface(process.stdin, process.stdout),
 read=q => new Promise(r=>{rl.question(q+' ',n=>r(n))}),
 RN=n => {try {n=eval(n)} catch(e) {n=null} if(typeof n!='number') throw "NaN!"; return n},
 getN=q => read(q).then(RN), NA=Number.isFinite, IN=Number.isInteger,
-LF=n => {if(n>FACT_MAX) return [n];let f=[],i=1; for(n=abs(n); i<=n; ++i) if(n%i===0) f.push(i); return f}, //List Factors
+LF=n => { //List Factors
+	if(n>FACT_MAX) return [n]; let f=[],i=1;
+	for(n=abs(n); i<=n; ++i) if(n%i===0) f.push(i); return f;
+},
 aPct=(a,p) => IN(p=(a.length-1)*p/100)?a[p]:(a[Math.floor(p)]+a[Math.ceil(p)])/2, //Percentile
 //Math Functions:
 abs=Math.abs, sqrt=Math.sqrt, cbrt=Math.cbrt, sin=Math.sin, cos=Math.cos, tan=Math.tan,
@@ -83,7 +93,9 @@ class Poly {
 					if(s) { //Invert Sqrt
 						s='',q=d[1]&&d[1].q; d.each(n => {n.e*=t.e,n.q=0,s+=' '+n},1);
 						(s=new Term((t.e<0?'-':'')+`(${s})^2`)).q=t.e<0?SFL(q):q; d=[s];
-					} else if(t.e<0) r.pr.t.each(n => {n.e=-n.e}); //Remove Par
+					} else { //Remove Par
+						r.pr.t[0].q=t.q; if(t.e<0) r.pr.t.each(n => {n.e=-n.e});
+					}
 					d.splice.apply(d,([i--,s?0:1]).concat(r.pr.t));
 				} else if(r.ps.startsWith('l')) { //Simp Log Terms
 					d.each(n => { if(n.d.length>1 && n.d[1].ps==r.ps && PEQ(n,t)) {
@@ -137,34 +149,41 @@ class Term {
 	toString() {return this.s()}
 	simp() {
 		let d=this.d;
-		for(let i=0,s; i<d.length; i++) { if((s=d[i]).p instanceof Poly) { //Simp Pow
-			if((s.p=s.p.simp()).t.length==1 && s.p.t[0].d.length==1) s.sp(s.p.t[0].e*(s.pn?-1:1));
+		for(let i=0,s,n; i<d.length; i++) { if((s=d[i]).p instanceof Poly) { //Simp Pow
+			n=s.pn; s.sp(s.p.simp()); if(n&&n!=s.pn) s.pn=!s.pn; n=s.p.t;
+			if(n.length==1 && n[0].d.length==1) s.p=n[0].e; //Rem Par
+			else if(s.p.s()=='1/2') s=d[i]=new SubTerm(`sqrt(${s.pr||s.x})`,1,s.pn); //Convert 1/2 to sqrt
 		} if(s.pr) { //Simp Par
-			let p=s.pr.simp(), t=p.t, n=NA(s.p)&&t.length==1&&t[0];
+			let p=s.pr.simp(), t=p.t; n=NA(s.p)&&t.length==1&&t[0];
 			if(n && s.ps.length==1 && (s.np()==1||!n.d.each(m => NA(m.p)?null:1))) {
-				n.d.each(m => m.sp(m.np()*s.np())); d.splice.apply(d,([i--,1]).concat(n.d));
+				n.d.each(m => m.sp(m.np()+'*'+s.np())); d.splice.apply(d,([i--,1]).concat(n.d));
 			} else if(n && s.ps=='sqrt(') { //Simp Sqrt
-				let e=n.e,x=FR(abs(e)),r=abs(e/x/x); x=[s.copy(x||0)];
-				if(r>1) x[1]=s.copy(`sqrt(${r})`); //Remainder
-				n.d.each(m => {
-					if(m.np()>1&&!(m.p%2)) x.push((m.p/=2)>1?m:s.copy(`abs(${m.s()})`));
-					else {
-						if(p=m.pn) m.inv(); t=s.copy(`sqrt(${m.s()})`);
-						if(p) t.inv(); x.push(t);
-					}
-				},1);
-				if(e<0) x.push(s.copy('i')); //Complex
-				d.splice.apply(d,([i,1]).concat(x)); i+=x.length-1;
-			} else d[i]=s.copy(s.ps+p.s()+')');
+				if(s.p>1 && !(s.p%2) && s.pr.t[0].e>0) s.p/=2,s.ps='(',s.x=s.x.substr(4); //Rem Sqrt
+				else {
+					let e=n.e,x=IN(e)?FR(abs(e)):1,r=abs(e/x/x); x=[s.copy(x||0)];
+					if(r>1) x[1]=s.copy(`sqrt(${r})`); //Remainder
+					n.d.each(m => {
+						if(m.np()>1&&!(m.p%2)) x.push((m.p/=2)>1?m:s.copy(`abs(${m.s()})`));
+						else {
+							if(p=m.pn) m.inv(); t=s.copy(`sqrt(${m.s()})`);
+							if(p) t.inv(); x.push(t);
+						}
+					},1);
+					if(e<0) x.push(s.copy('i')); //Complex
+					d.splice.apply(d,([i,1]).concat(x)); i+=x.length-1;
+				}
+			} else d[i]=s.copy((s.n?'-':'')+s.ps+p.s()+')');
 		}}
 		let e=this.e,v={},x,n; d.each((s,i) => {
-			if((n=NA(s.p)) && NA(s.e)) { //Combine Exp
+			if((n=NA(s.p)) && NA(s.e)) { //Combine Num
 				(d[i]=s=s.copy(s.e**s.p)).sp(s.pn?-1:1);
 				if(s.pn) {if(x=v['/']) return x.e*=s.e,'!'; v['/']=d[i]=s.copy()}
 				else return e*=s.e,'!';
 			} else { //Combine Like-vars
 				if(s.n) s.n=0,e=-e; //Invert Term
-				if(n) {if(x=v[s.x]) return x.sp(x.np()+s.np()),'!'; v[s.x]=d[i]=s=s.copy()}
+				if(x=v[s.x]) return x.sp(n&&NA(x.p)?
+					x.np()+s.np():`(${x.np()})+(${s.np()})`),'!';
+				v[s.x]=d[i]=s.copy();
 			}
 		},1);
 		d.each((s,i) => { //Del 0-Pow & Simp Frac
@@ -205,8 +224,9 @@ class SubTerm {
 		}
 	}
 	s(j,i,n) {
-		let m=this,x=m.x,p=m.p instanceof Poly?'('+m.p.s(j)+')':m.p,ps=m.ps,s=ps&&ps.length>1;
-		if(m.e==0) x=0; if(ps) { //Parenthesis
+		let m=this,x=m.x,p=m.p,ps=m.ps,s=ps&&ps.length>1;
+		if(p instanceof Poly) p=(p.t.length==1&&p.t[0].d.length==2&&p.t[0].e==1)?p.s(j):`(${p.s(j)})`;
+		if(m.e==0) x=0; if(ps) { //Paren
 			if(j&&ps.startsWith('log')) ps=`log(${Number(ps.substr(3,ps.length-4)||10)},`;
 			else if(j&&ps=='ln(') ps='log(0,'; x=ps+m.pr.s(j)+')';
 		}
@@ -214,7 +234,9 @@ class SubTerm {
 			+(!i&&n?NM(m.e):(m.n?'-':'')+(j?JX(x,p):XP(p,x)));
 	}
 	sp(p) {
-		let m=this; if(p instanceof Poly) return m.p=p;
+		let m=this; if(p instanceof Poly) {
+			if(p.t.length==1 && p.t[0].e<0) m.pn=1,p.t[0].e=-p.t[0].e; return m.p=p;
+		}
 		m.pn=NG(p); if(!NA(m.p=abs(p))) p=p.substr(m.pn?1:0),
 			m.p=new Poly(p.startsWith('(')&&p.endsWith(')')?p.substr(1,p.length-2):p);
 	}
@@ -246,28 +268,79 @@ function pMul(a,b,m) { //Multiply Polynomials
 	return new Poly(n);
 }*/
 
+//============================================== Support Functions ==============================================
+
 const PS=(p,s) => (p=new Poly(p),(s%2?'\n':'')+(s>1?p.simp():p).s()), //Poly String
 PSS=p => (p=new Poly(p),p+'\n'+p.simp()), //PS Simp
 pGet=(p,e,q) => p.t.each(t => t.xp()==e&&t.q==q?t.e:null)||0, //Get Term w/ Exp
-sSer=(s,v) => s.x==v||s.pr&&pSer(s.pr,v)!=null, //Sub var search
+sSer=(s,v) => s.x==v||(s.pr&&pSer(s.pr,v)!=null)||(s.p instanceof Poly&&pSer(s.p,v)!=null), //Sub var search
 tSer=(t,v) => t.d.each((s,i) => sSer(s,v)?i:null), //Term var search
 pSer=(p,v) => p.t.each((t,i) => tSer(t,v)!=null?i:null), //Poly var search
 sGet=s => {let q=EQ.exec(s),i=q.index,l=q[0].length; return [s.substr(i,l),
 	s.substr(0,i).trim(),s.substr(i+l).trim()]} //Get Sign
 
+function Der(p,v) { //Calc Derivative
+	let d=[],f,q,ql,x,w,c,n; p.t.each(t => {
+		c='',q=[],f=[]; t.d.each(s => {sSer(s,v)?q.push(s):c+=s.s()+' '}); //Separate Constants & X-Terms
+		ql=q.length; if(!ql) return; if(ql>2) return msg(Color.Red+"Can't do >2 sub-terms yet!");
+		q.each((q,i) => {
+			if(q.pn) q.inv(),q.QN=1;
+			if(q.QN&&!i) return msg(Color.Red+"Can't do negative pow terms!");
+			x=q.ps?q.pr.s():q.x, w=q.np(), n='';
+			if(q.ps && x!=v) n+=`(${Der(q.pr,v)})`,msg(); //Chain Rule
+			if(q.p instanceof Poly && pSer(q.p,v)!=null) { //X-Power
+				if(q.p.s()!=v) n+=`(${Der(q.p,v)})`,msg(); //Power Chain Rule
+				if(q.ps) return msg(Color.Red+"OOPS!"+Color.Rst,t,q); //???
+				n+=q.s()+` ln(${q.x})`;
+			} else {
+				if(q.ps) {if(q.ps.startsWith('log')) n+=`/(${x})/ln(${q.ps.substring(3,q.ps.length-1)||10})`;
+				else switch(q.ps) {
+					case 'ln(': n+=`/(${x})`; break; case 'sqrt(': n+=`1/2/sqrt(${x})`; break;
+					case 'sin(': n+=`cos(${x})`; break; case 'csc(': n+=`-csc(${x})*cot(${x})`; break;
+					case 'cos(': n+=`-sin(${x})`; break; case 'sec(': n+=`sec(${x})*tan(${x})`; break;
+					case 'tan(': n+=`sec(${x})^2`; break; case 'cot(': n+=`-csc(${x})^2`; break;
+					case '(': break; default: return msg(Color.Red+"OOPS!"+Color.Rst,t,q); //???
+				}}
+				if((!q.ps||q.ps=='(') && w!==1) n+=w+q.x+`^(${w}-1)`; //Var Power
+			}
+			if(ql>1) msg(`d/d${v}[${q.s()}] = `+n); f.push(n);
+		});
+		if(ql==2) { //Quotient/Product Rule
+			 if(q[0].QN) {
+				x=1;
+			}
+			x=q[1].QN;
+			msg(`\nUsing ${x?'Quotient':'Product'} Rule:`); w=q[1].s();
+			if(x) {
+				msg("f'(x)/g(x) - f(x)*g'(x)/g(x)^2");
+				f=[`(${f[0]})/(${w})`,`-(${q[0].s()})*(${f[1]})/(${w})^2`];
+			} else {
+				msg("g(x)*f'(x) + f(x)*g'(x)");
+				f=[`(${w})*(${f[0]})`,`(${q[0].s()})*(${f[1]})`];
+			}
+			msg(f.join(' + ')+'\n');
+		}
+		f.each((t,i) => {f[i]=c+t}); d.push(...f);
+	});
+	d.each((t,i) => {d[i]=new Term(t)}); x=(d=new Poly(d)).s(), f=d.simp(v).s();
+	msg(Color.Ylo+`d/d${v}[${p}]\n`+Color.Br+Color.Blu+`= ${x}`+(f!=x?'\n= '+f:''));
+	return f;
+}
+
 //============================================== Code ==============================================
 
 const ML = {
-	r:'Run', s:'Solver', p:'Poly Info', lf:'List Factors',
+	r:'Run', s:'Solver', d:'Derivative', p:'Poly Info', lf:'List Factors',
 	mp:'Multiply Poly', pp:'Poly Power', //dp:'Divide Poly',
 	tp:'Two-Point Solver', ps:'Point-Slope Solver', es:'Equation System',
 	qv:'Quadratic to Vertex Form', vq:'Vertex Form to Quadratic',
 	rt:'Root', ci:'Compound Interest', ic:'Inverse Comp Int',
 	/*dr:'Domain/Range Check'*/ a:'Dataset Analysis'//, h:'Histogram'
-}, CS=/(?:^|\s+)("[^"]+"|\S+)/g, CC='`', VAR={};
+}, CS=/(?:^|\s+)("[^"]+"|\S+)/g, CC='`',
+MC=Color.BgBlu+Color.Whi, VAR={};
 
 let MS='',n; for(let k in ML) MS+=(MS?','+(n?' ':'\n'):'')+CC+k+' = '+ML[k], n=!n;
-msg("Pecacheu's Math Solver v1.6.7"); await run(process.argv);
+msg(Color.Grn+"Pecacheu's Math Solver v1.6.8"); await run(process.argv);
 
 async function runCmd(s) {
 	let c=[0,0],m; while(m=CS.exec(s)) {
@@ -279,34 +352,37 @@ async function runCmd(s) {
 async function run(A) {
 let T=A[2], AL=A.length;
 if(!T) T='r'; else if(T=='?') return msg(MS);
-msg(ML[T]?`Mode: ${ML[T]}\n`:"Not supported!");
+msg(Color.BgMag+"Mode:",ML[T]?ML[T]+Color.Rst+'\n':"Not Supported");
 if(T=='r') { //RUN
 	msg("Type '?' for help, 'q' to quit.");
 	let f,r,v=VAR,S; while((f=(await read('>')).trim())!='q') try {
 		if(f=='?') msg(MS); else if(f.startsWith(CC)) await runCmd(f.substr(1));
 		else f.split(';').each(s => {
-			if(s=='simp') msg("Simplify",(S=S==1?0:1)?"On":"Off");
-			else if(s=='sx') msg("Simp X",(S=S==2?0:2)?"On":"Off");
-			else if(s=='code') msg("Code",(S=S==3?0:3)?"On":"Off");
+			if(s=='simp') msg(MC+"Simplify",(S=S==1?0:1)?"On":"Off");
+			else if(s=='sx') msg(MC+"Simp X",(S=S==2?0:2)?"On":"Off");
+			else if(s=='code') msg(MC+"Code",(S=S==3?0:3)?"On":"Off");
 			else if(s.startsWith('del ')) delete(v[s=s.substr(4).trim()]),msg("Delete",s);
-			else if(s=='vars') msg(v); else if(S && (S<2||S==2&&s.indexOf('=')==-1))
-				msg((S==2?"f(x) = ":'')+new Poly(S==2&&NA(v.x)?s.replace(/x/g,' '+v.x+' '):s).simp());
-			else {
-				if(S!=3) s=new Poly(s).s(1); try{r=eval(s)} catch(e) {r=e.toString()} msg(s,'->',r);
+			else if(s=='vars') msg(v); else if(S && (S<2||S==2&&s.indexOf('=')==-1)) {
+				if(S==2) msg(s.replace(/x/g,' '+v.x+' '));
+				s=new Poly(S==2&&NA(v.x)?s.replace(/x/g,' '+v.x+' '):s).simp();
+				msg((S==2?`f(${NA(v.x)?v.x:'x'}) = `:'')+Color.Ylo+s);
+			} else {
+				if(S!=3) s=new Poly(s).s(1); try {r=eval(s)}
+				catch(e) {r=Color.Red+e} msg(Color.Di+s,Color.Rst+'->',r);
 			}
 		});
-	} catch(e) {msg('-> '+e)}
+	} catch(e) {msg(Color.Red+'-> '+e)}
 } else if(T=='s') { //Solve
-	let p=A[3], pm=Array.from(p.matchAll(new RegExp(EQ,'g')));
-	if(AL!=5 || !pm.length || !(/^[a-z]$/).test(A[4])) return use(T,"<poly> <var>");
-	let v=A[4],pl=[],re=[],x,q,qd=0; //Convert Multi-Poly:
+	let p=A[3], v=A[4]||'x', pm=Array.from(p.matchAll(new RegExp(EQ,'g')));
+	if(AL<4 || !pm.length || !(/^[a-z]$/).test(v)) return use(T,"<poly> <var>");
+	let pl=[],re=[],x,q,qd=0; //Convert Multi-Poly:
 	pm.each((_,i,l) => {pl.push(new Poly(p.substring(i?pm[i-1].index+
 		pm[i-1][0].length:0, i==l-1?p.length:pm[i+1].index-1)))});
 	for(p=0; p<pl.length; p++) { //Solve Poly
 		let a,s,s2,m,LP=0; if(p) msg("\nSolve Split #"+p);
 		while((s=pl[p].s()) != s2) { //Run Solver
-			x=[]; if(++LP>200) throw "Stuck!"; msg(s+(m?` (${m})`:''));
-			m=0,a=(pl[p]=pl[p].simp(v)).t; if((s2=pl[p].s()) != s) msg(s2+" (Simplify)");
+			x=[]; if(++LP>20) throw "Stuck!"; msg(s,Color.Di+(m?`(${m})`:''));
+			m=0,a=(pl[p]=pl[p].simp(v)).t; if((s2=pl[p].s()) != s) msg(s2,Color.Di+"(Simplify)");
 			if(!a.each((t,i) => { //Move Term
 				if((q=tSer(t,v))!=null) x.push({t:t,s:t.d[q]});
 				if(t.e && !q==!t.q) { //Non-zero terms on wrong side of eq
@@ -327,18 +403,21 @@ if(T=='r') { //RUN
 						m="Undo Abs; Split #"+(pl.length-1); continue;
 					} else if(q.s.ps.length==1 && !q.s.pn) { //Multiply
 						//TODO: If s.pn, then move parenthesis term to other side (s.inv()), pMul on ENTIRE contents of other side (as if enclosed in paren, but saves a processing step)
-						//Todo: Add divide as well?
-						let r=0; m=0; q.t.d.each(s => {
-							r=(s==q.s); if(!m) (r?s.np()>1&&(s.sp(s.np()-1),1):s.e!=1&&s.np()==1&&(!s.ps||s.ps.length==1))?r=2:0;
-							if(r>1) msg("\nMultiply",q.s.s(),"by",s.s()), m=s.pr||new Poly(s.s());
-							if(r) return '!';
-						});
-						if(m) { q.t.d.push(q.s.copy(`(${pMul(q.s.pr,m,1)})`)),msg(),m="Distribute"; continue; }
-						else q.t.d.push(q.s);
+						let r,w,ml=[]; m=0; q.t.d.each(s => { if(NA(w=s.np())) {
+							if(s==q.s) r=(w>2 || (w>1 && x.length>1)),s.NP=--w; //Power
+							else r=(s.e!=1 && ((!s.ps && w>0) || (s.ps && s.ps.length==1 && w==1))); //SubTerm
+							if(r) s.pr?(m=s.pr,s.NP=w-1):(ml.push(s.s()),s.NP=0);
+						}});
+						if(m || ml.length) {
+							if(!m) m=new Poly(ml.join(' ')); msg(Color.Cya+`\nMultiply (${q.s.pr}) by (${m})`);
+							q.t.d.each((s,i) => s.NP==null?null:s.NP?s.sp(s.NP):i?'!':(q.t.d[i]=new SubTerm(1),null));
+							q.t.d.push(new SubTerm(`(${pMul(q.s.pr,m,1)})`)),msg(),m="Distribute"; continue;
+						}
 					}
 				}
 				q=[],m={};
-				if(x.length==2 && !x.each(x => x.s.np()==2?(m.a=x.t,null):x.s.np()==1?(m.b=x.t,null):1)) { //Quadratic
+				if(x.length==2 && !x.each(x => x.s.np()==2?(m.a=x.t,null)
+				:x.s.np()==1?(m.b=x.t,null):1) && m.a && m.b) { //Quadratic
 					if(!qd) {
 						let a=new Term(m.a.s());
 						a.d.each(s => s.e==1||sSer(s,v)?'!':null); qd=1,q=a.d;
@@ -349,8 +428,8 @@ if(T=='r') { //RUN
 						a.each((t,i) => t.q?(a.splice(i,0,m),1):null);
 						(q=m.copy()).q=1; a.push(q);
 						q=[pl[p].s(),(pl[p]=pl[p].simp()).s()];
-						msg(q[0]+` (Add (b/2a)^2 = ${m})`);
-						if(q[0]!=q[1]) msg(q[1]+" (Simplify)");
+						msg(q[0],Color.Di+`(Add (b/2a)^2 = ${m})`);
+						if(q[0]!=q[1]) msg(q[1],Color.Di+"(Simplify)");
 						m=(a=pl[p].t).each((t,i) => t.q?i:null);
 						a.splice(0,m,new Term(`(${v}+${b}/2)^2`));
 						m="Reverse Square Rule", qd=2; continue;
@@ -358,9 +437,6 @@ if(T=='r') { //RUN
 				} else if(qd>1) qd=0;
 				m=[]; if(!q.length) {
 					if(x.each(x => x.s.np()>2?1:null)) q=[new SubTerm(v)];
-					/*if(!x.each(x => x.t.d.each(s => {
-						if(sSer(s,v) && !s.pn) return 1;
-					}))) m=[new SubTerm(v)];*/
 					else x.each(x => x.t.d.each(s => {
 						s.e==1||(s.pn?m.push(s):sSer(s,v)?0:q.push(s));
 					}));
@@ -376,7 +452,7 @@ if(T=='r') { //RUN
 				}
 				if(x.length != 1) break; //Couldn't solve!
 				if((x=x[0]).s.np() != 1) { //Square Pow
-					if(x.s.np() != 2) return msg("Can't handle non-square pow yet!");
+					if(x.s.np() != 2) return msg(Color.Red+"Can't handle non-square pow yet!");
 					x.s.sp(1), q=a[1].q, m=sGet(s2), s=`sqrt(${m[2]})`;
 					a.splice(1,a.length,new Term(s)), pl.push(new Poly(x.t+SFL(m[0])+'-'+s));
 					a[1].q=q, m="Perfect Square; Split #"+(pl.length-1);
@@ -384,8 +460,8 @@ if(T=='r') { //RUN
 			}
 		}
 		m=s==s2?sGet(s):0;
-		if(!m || !s.startsWith(v+' '+m[0])) msg("Couldn't solve!"); else {
-			msg("Done!"); re.push(s); q=m[0][0], x=m[0][1];
+		if(!m || !s.startsWith(v+' '+m[0])) msg(Color.Red+"Couldn't solve!"); else {
+			msg(Color.Ylo+"Done!"); re.push(pl[p]); q=m[0][0], x=m[0][1];
 			if(q=='>') re.gt=eval(m[2]),re.gq=(x?'[':'(')+m[2];
 			else if(q=='<') re.lt=eval(m[2]),re.lq=m[2]+(x?']':')');
 		}
@@ -393,8 +469,14 @@ if(T=='r') { //RUN
 	q=''; if(re.gt >= re.lt) q=`(-infinity, ${re.lq}U${re.gq}, infinity)`;
 	else if(re.gt < re.lt) q=re.gq+', '+re.lq; else if(re.gt != null) q=re.gq+', infinity)';
 	else if(re.lt != null) q='(-infinity, '+re.lq;
-	if(re.length) msg('\n'+re.join('; '),q?'\n'+q:'');
-	if(re.length==1 && (q=sGet(re[0]))[0]=='=') msg(`Set var ${v} to`,VAR[v]=eval(q[2]));
+	if(re.length) msg(Color.Br+Color.Blu+'\n'+re.join('; '),q?'\n'+q:'');
+	if(re.length==1 && re[0].t.each(t => t.q)=='=') {
+		q=eval(sGet(re[0].s(1))[2]); if(NA(q)) msg(Color.Di+`Set var ${v} to`,VAR[v]=q);
+	}
+} else if(T=='d') { //Derivative
+	let v=A[4]||'x';
+	if(AL<4 || !(/^[a-z]$/).test(v)) return use(T,"<poly> <var>");
+	Der(new Poly(A[3]).simp(),v);
 } else if(T=='p') { //Poly Info
 	if(AL!=4) return use(T,"<poly>");
 	let p=new Poly(A[3]).simp(), t=p.lt();
