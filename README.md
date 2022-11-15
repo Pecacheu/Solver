@@ -16,10 +16,10 @@ solver ? [Windows]
 ```
 
 ## Usage
-You can run commands directly, eg. `solver mp "x^2" "2x + 5"`, or just enter RUN mode with `solver`, then call another mode using the `` ` `` symbol, eg. `` `mp "x^2" "2x + 5"``
+You can run commands directly, eg. `solver mp "x^2" "2x + 5"`, or just enter RUN mode with `solver`, then call another mode using the `` ` `` symbol. Try `` `mp "x^2" "2x + 5"`` or `` `g "(x/2-1)^2-1" 0 0 4``
 
-### In RUN Mode (Default)
-- Type `?` for command list
+### In RUN Mode (Default; SX = On)
+- Type `?` for command list & help
 - Run a command with `` `<cmd> [arg1] [arg2]...`` *(You can enclose args in quotes)*
 - Set a variable (a-z) ex `x = 2*3` -> `x = 6`
 - Delete a variable with `del <name>`
@@ -27,18 +27,28 @@ You can run commands directly, eg. `solver mp "x^2" "2x + 5"`, or just enter RUN
 - Enable Simplify mode with `simp`
 - Then simplify a formula ex `x^3 + 4x^3` -> `5x^3`
 - `sx` = Simplify X mode *(Simp mode but with substitution for X)*
-- `js` = Code mode *(Allows direct eval of JavaScript)*
+- `code` = Code mode *(Allows direct eval of JavaScript)*
 - Type `q` to quit
 
 ### Special Functions (Use in any Poly)
 - `sqrt(x)` = Square Root
 - `cbrt(x)` = Cube Root
-- `abs(x)` = Absolute Value
+- `abs(x)` or `|x|` = Absolute Value
 - `ln(x)` = Natural Logarithm (Base e)
 - `log(x)` = Common Logarithm (Base 10)
 - `logb(x)` = Logarithm (Ex. `log4(x)`)
 - `sin|cos|tan|sec|csc|cot(x)` Sine functions (rad)
 - `asin|acos|atan(x)` Arcsine functions (rad)
 - `rad(x)` Convert degrees to radians
+- `perm(n,r)` Permutation (`n!/(n-r)!`)
+- `comb(n,r)` Combination (`n!/(r!(n-r)!)`)
+- `x!` Factorial (Equivalent to perm where r=n-1)
 - `p` = Pi (~3.14)
 - `e` = Euler's number (~2.718)
+
+### Graph Controls (In Graph Mode)
+- `Up/Down` Move Y Axis
+- `Right/Left` Move X Axis
+- `+/-` Adjust Zoom Level
+- `Home` or `Space` Recenter View
+- `Esc` Exit Graph Mode
