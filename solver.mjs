@@ -1,5 +1,5 @@
 //Solver.js ©2022 Pecacheu. GNU GPL v3.0
-const VERS="v1.7.0";
+const VERS="v1.7.1";
 
 import rdl from 'readline';
 import Color from './color.mjs';
@@ -21,7 +21,7 @@ aPct=(a,p) => IN(p=(a.length-1)*p/100)?a[p]:(a[Math.floor(p)]+a[Math.ceil(p)])/2
 //Math Functions:
 abs=Math.abs, sqrt=Math.sqrt, cbrt=Math.cbrt, sin=Math.sin, cos=Math.cos, tan=Math.tan,
 sec=x=>1/cos(x), csc=x=>1/sin(x), cot=x=>1/tan(x), asin=Math.asin, acos=Math.acos, atan=Math.atan,
-rad=d=>d*2*Math.PI/360,
+rad=d=>d*Math.PI*2/360, deg=d=>d*360/(Math.PI*2),
 log=(b,x)=>b==2?Math.log2(x):b==10?Math.log10(x):Math.log(x)/(b?Math.log(b):1),
 perm=(n,r) => {if(n==r||!n)return 1;r=r?n-r:1;for(let i=n-1;i>r;--i)n*=i;return n}, //Factorial/Permutation
 comb=(n,r) => perm(n,r)/perm(r), //Combination
@@ -38,7 +38,7 @@ Array.prototype.each = function(fn,st,en) {
 
 const PAR='\\((?:\\((?:\\((?:\\((?:\\([^()]+\\)|[^()])+\\)|[^()])+\\)|[^()])+\\)|[^()])+\\)',
 PT=/[^\d.a-z()/*^+<=>!%-\s]/, EQ=/[<=>]+/,
-FL='sqrt|cbrt|abs|rad|sin|cos|tan|sec|csc|cot|asin|acos|atan|perm|comb|ln|log[\\d]*',
+FL='sqrt|cbrt|abs|rad|deg|sin|cos|tan|sec|csc|cot|asin|acos|atan|perm|comb|ln|log[\\d]*',
 DN=/^-\s*-/, ST=`-?\\s*(?:[\\d.]+%?|(?:${FL})?${PAR}|[a-z])`,
 TS=new RegExp(`([<>]=?|=)?\\s*(?:[+-]\\s*){0,2}(?:${PAR}|[/*^]\\s*-?|[^()/*^+<=>-]+)+`,'g'),
 DP=new RegExp(`([*/])?\\s*(${ST}\\!?)(?:\\^(${ST}))?`,'g'),
@@ -55,7 +55,7 @@ function pTrim(s) { //Trim Parenthesis
 	let i=0,l=s.length,p=0,pt,a,
 	SSP=r => (s=s.substr(0,i)+r+s.substr(i+1),l=s.length,i+=r.length-1);
 	for(;i<l;++i) {
-		s[i]=='('?((p<pt?pt=p:0),++p,a?p=-1:0):s[i]==')'?(--p,a?p=-1:0) //TODO: check that p doesn't end at a different number than it started, check should be moved to when the second | is found???
+		s[i]=='('?((p<pt?pt=p:0),++p,a?p=-1:0):s[i]==')'?(--p,a?p=-1:0)
 		:s[i]=='|'?a?(a=0,SSP(')')):(a=p+1,SSP('abs(')):(pt==null||p<pt?pt=p:0);
 		if(p<0) break;
 	}
@@ -149,7 +149,7 @@ class Term {
 		} if(s.pr) { //Simp Par
 			let p=s.pr.simp(), t=p.t; n=t.length==1&&t[0];
 			if(n && s.ps.length==1) { //Rem Par
-				n.d.each(m => (abs(m.e)==1?0:m.sp(m.np()+'*'+s.np()),m.e==1?'!':null));
+				n.d.each(m => (m.e==1?0:m.sp(m.np()+'*'+s.np()),m.e==1?'!':null));
 				if(s.n&&n.d[0]) n.d[0].n=!n.d[0].n,n.d[0]=n.d[0].copy(); d.splice(i--,1,...n.d);
 			} else if(n && (s.ps=='ln(' || s.ps.startsWith('log'))) { //Simp Log
 				let b=s.ps=='ln('?'e':(s.ps.substring(3,s.ps.length-1)||10);
@@ -718,9 +718,9 @@ if(T=='r') { //RUN
 	});
 	msg(); r.each((d,i) => {msg(S+W*i,'->',S+W*(i+1),'=',d.length)});
 }*/else if(T=='sm') { //Summation
-	let n=Number(A[4]),i=Number(A[5]); if(!n) return use(T,"<poly> <n> [i]");
-	if(!(i>0)) i=1; let r=0,p=new Poly(A[3]).simp(); VAR.n=n,VAR.i=i;
-	msg(Color.Ylo+`E[${n};i=${i}](${p})`); p=eval(`v=>(${p.s(1)})`);
-	for(; VAR.i<=n; ++VAR.i) r+=p(VAR); msg(Color.Br+Color.Blu+'= '+r);
-	delete VAR.i; delete VAR.n;
+	let n=Number(A[4]),i=Number(A[5]); if(!n) return use(T,"<poly> <n> [k]\nE[n;i=k](poly)");
+	if(Number.isNaN(i)) i=1; let r='',p=new Poly(A[3]).simp().s();
+	msg(Color.Ylo+`E[${n};i=${i}](${p})`);
+	for(; i<=n; ++i) r+=(r.length?" + ":'')+`(${p.replace(/i/g,`(${i})`)})`;
+	msg('= '+r); msg(Color.Br+Color.Blu+'= '+new Poly(r).simp());
 }}
