@@ -23,4 +23,4 @@ export default {
 	BgMag: "\x1b[45m", //BgMagenta
 	BgCya: "\x1b[46m", //BgCyan
 	BgWhi: "\x1b[47m", //BgWhite
-};
+}

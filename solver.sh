@@ -1,2 +1,3 @@
 #!/bin/bash
-node solver.mjs "$@"
+if [ $1 -eq 'old' ]; then node solverOld.mjs
+else node solver.mjs $@; fi
