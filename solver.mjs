@@ -1,11 +1,11 @@
 //Solver.js ©2022 Pecacheu. GNU GPL v3.0
-const VERS=">>>Beta<<< v2.0 b4";
+const VERS=">>>Beta<<< v2.0 b5";
 
 import rdl from 'readline';
-import Color from './color.mjs';
+import {C,msg} from './AutoLoader/color.mjs';
 import {Decimal as Dec} from './decimal.min.mjs';
 Dec.set({precision:25, rounding:4});
-const MAT_COL_W=4,
+let FRAC=1; const MAT_COL_W=4, FACT_MAX=1000000000,
 TCON="G1s0bRtbMW0bWzQybRtbMzdtMS4gQXNzZXJ0IHlvdXIgRG9taW5hbmNlG1swbRtbMzZtCiAgICAgICAgI\
 CAgXiAgICBeCiAgICAgICAgICjNocKwIM2cypYgzaHCsCkKICAgICAgIF9fX18rICAgK19fX18KICAgICAgICAg\
 ICB8IH4gfAogICAgICAgICp+fnxfX198CiAgICAgICAgICAgfCAgIHwKICAgICAgICAgICAtICAgLQogIBtbMzN\
@@ -14,18 +14,12 @@ EgZ2VvbWV0cmljIHBsYW5lIG9mIHN1cGVyaW9yCiAgaW50ZWxsZWN0LiBVc2UgdGhlIBtbMzRtdHBvc2
 zNtIGZ1bmN0aW9uIHRvIGFzc2lzdC4KICBSZW1lbWJlciwgG1sxbWludGVsbGlnZW5jZSA9IGleMm5eMnRlXjNs\
 XjJnYxtbMG0bWzMzbS4";
 
-msg(Color.Un+Color.Red+"WARNING! This BETA release is not yet finished. Some things are still being worked on, such as SOLVER mode. Please return to the last stable release to use any missing features!");
-msg("TIP: The last stable version is bundled in as "+Color.Un+"solverOld.mjs"+Color.Rst+". If you want to run the old version, start the script as 'solver old'.\n");
+msg(C.Un+C.Red+"WARNING! This BETA release is not yet finished. Some things are still being worked on, such as SOLVER mode. Please return to the last stable release to use any missing features!");
+msg("TIP: The last stable version is bundled in as "+C.Un+"solverOld.mjs"+C.Rst+". If you want to run the old version, start the script as 'solver old'.\n");
 
 process.stdin.setRawMode(1);
 process.stdin.setEncoding('utf8');
-function msg() {
-	let a=arguments,l=a.length-1;
-	if(typeof a[l]=='string') a[l]+=Color.Rst;
-	else Array.prototype.push.call(a,Color.Rst);
-	console.log(...a);
-}
-const use=(t,u) => msg(Color.Red+"Usage:",t,u),
+const use=(t,u) => msg(C.Red+"Usage:",t,u),
 rl=rdl.createInterface(process.stdin, process.stdout),
 read=q => new Promise(r=>{rl.question(q+' ',n=>r(n))}),
 //RN=n => {try {n=eval(n)} catch(e) {n=null} if(typeof n!='number') throw "NaN!"; return n},
@@ -33,13 +27,13 @@ read=q => new Promise(r=>{rl.question(q+' ',n=>r(n))}),
 NUM=(d,f)=>d instanceof Dec?(f?1:d.isFinite()):Number.isFinite(d),
 INT=d=>d instanceof Dec?d.isInteger():Number.isInteger(d),
 //Math Functions:
-NAN=new Dec(NaN), abs=d=>{try{return Dec.abs(d)}catch(e){}return NAN};
+NAN=Dec(NaN), abs=d=>{try{return Dec.abs(d)}catch(e){}return NAN},
 /*sqrt=Dec.sqrt.bind(Dec), cbrt=Dec.cbrt.bind(Dec),
 sin=Dec.sin.bind(Dec), cos=Dec.cos.bind(Dec), tan=Dec.tan.bind(Dec),
 sec=x=>1/cos(x), csc=x=>1/sin(x), cot=x=>1/tan(x),
-asin=Dec.asin.bind(Dec), acos=Dec.acos.bind(Dec), atan=Dec.atan.bind(Dec),
+asin=Dec.asin.bind(Dec), acos=Dec.acos.bind(Dec), atan=Dec.atan.bind(Dec),*/
 PI=Dec.acos(-1), PI2=PI.mul(2), rad=d=>d.mul(PI2).div(360), deg=d=>d.mul(360).div(PI2);
-log=(b,x)=>b==2?Math.log2(x):b==10?Math.log10(x):Math.log(x)/(b?Math.log(b):1),
+/*log=(b,x)=>b==2?Math.log2(x):b==10?Math.log10(x):Math.log(x)/(b?Math.log(b):1),
 perm=(n,r) => {if(n==r||!n)return 1;r=r?n-r:1;for(let i=n-1;i>r;--i)n*=i;return n}, //Factorial/Permutation
 comb=(n,r) => perm(n,r)/perm(r), //Combination
 root=(x,n)=>(x>1||x<-1)&&0==n?1/0:(x>0||x<0)&&0==n?1:x<0&&n%2==0?`${(x<0?-x:x)**(1/n)}i`:3==n
@@ -53,47 +47,63 @@ Array.prototype.each = function(fn,st,en) {
 
 //============================================== Polynomial Lib ==============================================
 
-const MQ=/^(;?\s*([<>]=?|=)?\s*)(?:[+-]\s*){0,2}/, DN=/^(?:-\s*-\s*|\+\s*)|\s+$/g,
+const VRT=/[a-z]/, VSV=/^([a-z])\s=\s/, VEQ=/^[^\[=<>]+(=|[<>]=?)[^\[=<>]+$/,
+MQ=/^(;?\s*([<>]=?|=)?\s*)(?:[+-]\s*){0,2}/, DN=/^(?:-\s*-\s*|\+\s*)|\s+$/g,
 PAR='\\((?:\\((?:\\((?:\\((?:\\([^()]+\\)|[^()])+\\)|[^()])+\\)|[^()])+\\)|[^()])+\\)',
-FL='sqrt|cbrt|abs|rad|deg|sin|cos|tan|sec|csc|cot|asin|acos|atan|perm|comb|ln|log|tpose|det|inv|rref|eye',
-ST=`-?\\s*(?:[\\d.]+%?|(?:${FL})?${PAR}|[a-zP]|\\[[^\\[\\]]+\\])`, VRT=/[a-z]/,
+FL='sqrt|cbrt|abs|rad|deg|sin|cos|tan|sec|csc|cot|asin|acos|atan|\
+perm|comb|ln|log|tpose|sum|dot|dotPow|norm|rows|cols|det|inv|rref|eye',
+ST=`-?\\s*(?:[\\d.]+(?:e[+-]\\d+)?%?|(?:${FL})?${PAR}|[a-zPA]|\\[[^\\[\\]]+\\])`,
 DP=new RegExp(`([*/])?\\s*(${ST}\\!?)(?:\\^(${ST}))?\\s*`,'g'),
 //TODO: Better method than REGEX for DP (SubTerm detect)?
 NM=(n,sb,p) => n==1?'':(sb||'')+(n==-1&&!p?'-':n), XP=(p,x) => p?x+NM(p,'^',1):'',
-FR=x => {x=Number(x);for(let n=x,v; n>0; --n) if(INT(v=Math.sqrt(n)) && INT(x/n)) return new Dec(v)}, //Factor root
-NG=x => NUM(x)?x instanceof Dec?x.lt(0):x<0:x.length&&x.startsWith('-'), //isNegative
+FR=(x,f) => { //Factor Root
+	if(x.lt(FACT_MAX)) {
+		x=Number(abs(x)); for(let n=x,v; n>0; --n) if(INT(v=Math[f](n)) && INT(x/n)) return Dec(v);
+	}
+	return Dec(0);
+}, NG=x => NUM(x)?x instanceof Dec?x.lt(0):x<0:x.length&&x.startsWith('-'), //isNegative
 GCD=(a,b) => {for(let t;!b.isZero();)t=b,b=a.mod(b),a=t;return a}, //Greatest Common Denominator
 PEQ=(a,b) => a.pn==b.pn&&(NUM(a.p)?a.p.eq(b.p):!NUM(b.p)&&a.p.s()==b.p.s()), //Power Equals
 VRS=t => VRT.test(t.s()), //Has Vars
 PZ=p => p.t.length==1&&p.t[0].e.eq(0), //Poly Zero
 ACT=(l,n) => {if(l!=n) throw `Wrong Args Count (${l} != ${n})`}, //Arg Count
-MFN=(s,f,e,l) => { //Matrix Func
-	ACT(l,1); let n=s.pr[0].t[0],m;
-	if(n.e==1 && n.d.length==2 && (m=n.d[1].m)) {s.sx(m[f]());return 1}
+MAT=(s,i=0) => (s.pr&&(s=s.pr[i],s=!s.t[1]&&s.t[0]),s&&s.e==1&&s.d.length==2&&s.d[1].m), //Get Mat
+MFN=(s,f,l,nm) => { //Matrix Func
+	ACT(l,1); let n=s.pr[0].t[0],m; if(n.e==1 && (m=MAT(s)))
+		return f=nm===2?m[f]:m[f](),s.sx(nm?`(${f})`:f),1;
 	else if(f=='tpose' && n.e==1 && !n.d[2]) msg(Buffer.from(TCON,'base64')+''),s.sx(0);
-	else if(!VRS(n)) throw e+" Non-Matrix";
+	else if(!VRS(n)) throw "Bad input to "+f;
 }, SQC=(s,f,rt,l) => { //Sqrt/Cbrt
-	ACT(l,1); let n=s.pr[0].t; if(n) n=n[0];
-	if(s.p.gt(1) && s.p.mod(rt).eq(0) && s.pr.t[0].e.gt(0)) s.p=s.p.div(rt),s.ps='(';
-	else if(n) {
-		//TODO: Cbrt remainder slightly broken, shouldn't use 'i' for cbrt
-		let e=n.e,x=INT(e)?FR(abs(e)):1,r=abs(e.div(x.pow(rt))),np;
-		x=[s.copy(x)]; if(r.gt(1)) x[1]=s.copy(f+`(${r})`); //Remainder
-		n.d.each(m => {
-			if(m.np().gt(1)&&m.p.mod(rt).eq(0)) {
-				x.push((m.p=m.p.div(rt)).gt(1)?m:s.copy((s.n&&!np?'-':'')
-					+(n%2?'':'abs')+`(${m.s()})`)),np=1;
-			} else {
-				if(l=m.pn) m.inv();
-				m=s.copy((s.n&&!np?'-':'')+f+`(${m.s()})`),np=1;
-				if(l) m.inv(); x.push(m);
-			}
-		},1);
-		if(e.lt(0)) x.push(s.copy('i')); //Complex
-		return x;
+	ACT(l,1); let n=s.pr[0].t;
+	if(l=MAT(s)) return s.sx(l.func(f)),1; //Matrix
+	if(INT(s.p) && !s.p.eq(0) && s.p.mod(rt).eq(0)
+		&& n[0].e.gt(0)) return s.p=s.p.div(rt),s.ps='(',1; //Root Pow
+	if(n.length!=1) return;
+	n=n[0]; let sq,e=n.e,re=INT(rt/2),x=FRAC&&INT(e)?FR(e,f):Dec(0);
+	if(x.eq(0)) x=[new SubTerm((re?abs(e):e)[f]())], sq=!e.eq(1); else {
+		l=abs(e.div(x.pow(rt))), sq=!x.eq(1), x=[new SubTerm(!re&&e.lt(0)?x.neg():x)];
+		if(!l.eq(1)) x[1]=new SubTerm(f+`(${l})`); //Remainder
 	}
+	n.d.each(m => {
+		if(INT(m.p) && m.p.mod(rt).eq(0)) { //Simp Sqrt/Cbrt
+			x.push(!(m.p=m.p.div(rt)).eq(1)?m:new SubTerm((re?'abs':'')+`(${m.s()})`)),sq=1;
+		} else {
+			if(l=m.pn) m.inv(); m=new SubTerm(f+`(${m.s()})`); if(l) m.inv(); x.push(m);
+		}
+	},1);
+	if(re&&e.lt(0)) x.push(new SubTerm('i')),sq=1; //Complex
+	if(sq || x.length==1) return n.d=x,s.ps='(',1;
 }
 
+function pSplit(s,sep) { //Split Poly
+	let i=0,l=s.length,p=0,ml,c,sp=[],lm=0,sl=sep.length;
+	for(;i<l;++i) {
+		c=s[i]; if(c=='(') ++p; else if(c==')') --p;
+		else if(c=='[') ml=1; else if(c==']') ml=0;
+		else if(!p&&!ml && c==sep) sp.push(s.substring(lm,i)),lm=i+sl;
+	}
+	if(p) throw "Paren Error"; sp.push(s.substr(lm)); return sp;
+}
 function pFind(s,mat) { //Match Poly
 	let q=MQ.exec(s),i=q[0].length,l=s.length,p=0,ml,m,c,nr;
 	for(;i<l;++i) {
@@ -104,8 +114,8 @@ function pFind(s,mat) { //Match Poly
 		} else if(!p) {
 			if(mat&&(c==' '||c==';'&&(nr=1))) break;
 			else if(c=='*'||c=='/') m=1; else if(m&&c!=' ') m=0;
-			else if(!mat&&!ml&&(c=='+'||c=='-'||c=='<'||c=='>'||c=='=')) break;
-			//if(c!=' ') throw "Bad Char @ "+i;
+			else if(!mat&&!ml && ((c=='<'||c=='>'||c=='=') || (c=='+'||c=='-')
+				&& (s[i-1]!='e'||!Number(s[i-2])||!Number(s[i+1])))) break;
 		}
 		if(p||mat) {
 			if(c=='<'||c=='>'||c=='=') throw "Bad Equation";
@@ -139,10 +149,15 @@ class Poly {
 	s() {let s='';this.t.each((t,i) => {s+=t.s(i)});return s}
 	toString() {return this.s()}
 	simp(xv) { //Simplify
-		let p=this.t,i=0,l=p.length,t,dq;
+		let p=this.t,i=0,l=p.length,t,m,ts,dq;
 		p.each(t => {t.simp(xv);if(!dq)dq=t.q});
 		for(; i<l; ++i) {
-			t=p[i]; p.each(n => t.like(n)?(t.e=t.e.add(n.e),t.simp(xv),--l,'!'):null, i+1); //Like-Terms
+			t=p[i],m=MAT(t),ts=0; p.each(n => {
+				if(t.like(n)) t.e=t.e.add(n.e),n=1; //Like-Terms
+				else if(m && !t.q==!n.q && (n=MAT(n))) t.d[0].sx(m.add(n)),n=1; //Mat Add
+				if(n===1) return ts=1,--l,'!'; //Del Term
+			}, i+1);
+			if(ts) t.simp(xv); //Simp Flag
 			if(t.e.eq(0)) {p.splice(i--,1),--l; if(t.q&&t.q!=1) p[i+1].q=t.q} //Cut 0
 			if(!NUM(t.e)) {p.splice(0,i),p.splice(i+1);break} //Del All
 			/*if(t.d.length==2 && (r=t.d[1]).pr) { //Paren
@@ -211,16 +226,17 @@ class Term {
 			if((s=d[i]).p instanceof Poly) { //Simp Pow
 				s.sp(s.p.simp(xv),1); n=s.p.t;
 				if(n.length==1 && n[0].d.length==1) s.sp(n[0].e.mul(s.pn?-1:1)); //Rem Par
-				else if((n=s.p.s())=='1/2') s=d[i]=new SubTerm(`sqrt(${s.xis()})`,1,s.pn); //Sqrt
-				else if(n=='1/3') s=d[i]=new SubTerm(`cbrt(${s.xis()})`,1,s.pn); //Cbrt
+				else if((n=s.p.s())=='1/2') s=d[i]=new SubTerm(`sqrt(${s.xs()})`,1,s.pn); //Sqrt
+				else if(n=='1/3') s=d[i]=new SubTerm(`cbrt(${s.xs()})`,1,s.pn); //Cbrt
 			}
-			if(s.pr) for(let pn=0,pl=s.pr.length; pn<pl; ++pn) { //Simp Par
-				let p=s.pr[pn].simp(xv),t=p.t; n=t.length==1&&t[0];
+			if(s.pr) for(let pn=0,pl=s.pr.length,p,t; pn<pl; ++pn) { //Simp Par
+				p=s.pr[pn].simp(xv), t=p.t, n=t.length==1&&t[0];
 				if(n && s.ps.length==1) { //Rem Par
 					ACT(pl,1); n.d.each(m => m.e==1?'!':(m.sp(m.np()+'*'+s.np()),null));
-					if(s.n&&(t=n.d[0])) t.neg(); d.splice(i--,1,...n.d); l=d.length;
-				} else if(n && s.ps=='abs(' && !VRS(n)) { //Simp Abs
-					ACT(pl,1); if((t=n.d[0]).n) t.neg(); s.ps='(';
+					if(s.n&&(t=n.d[0])) t.neg(); d.splice(i--,1,...n.d),l=d.length;
+				} else if(n && s.ps=='abs(') { //Simp Abs
+					ACT(pl,1); if(t=MAT(n)) s.sx(t.func('abs')),--i;
+					else if(!VRS(n)) (t=n.d[0]).n&&t.neg(),s.ps='(',--i;
 				} /*else if(n && (s.ps=='ln(' || s.ps.startsWith('log'))) { //Simp Log
 					let b=s.ps=='ln('?'e':(s.ps.substring(3,s.ps.length-1)||10);
 					if(n=(n.e==1&&n.d[1])||n.d[0]) {
@@ -228,21 +244,36 @@ class Term {
 						else if(n.x==b) d[i]=new SubTerm(n.np());
 						else if(n.e==1) d[i]=new SubTerm(0);
 					}
-				}*/ else if(NUM(s.p) && s.ps=='sqrt(') { //Simp Sqrt
-					if(n=SQC(s,'sqrt',2,pl)) d.splice(i,1,...n),i+=n.length-1,l=d.length;
-				}/* else if(NUM(s.p) && s.ps=='cbrt(') { //Simp Cbrt
-					if(n=SQC(s,'cbrt',3,pl)) d.splice(i,1,...n),i+=n.length-1,l=d.length;
-					//TODO: rad|deg|sin|cos|tan|sec|csc|cot|asin|acos|atan|perm|comb
-				}*/ else if(n && s.ps=='tpose(') {if(MFN(s,'tpose',"Transpose",pl)) --i}
-				else if(n && s.ps=='det(') {if(MFN(s,'det',"Determinant of",pl)) --i}
-				else if(n && s.ps=='inv(') {if(MFN(s,'inv',"Inverse of",pl)) --i}
-				else if(n && s.ps=='rref(') {if(MFN(s,'rref',"Reduce",pl)) --i}
-				else if(n && s.ps=='eye(') {
+				}*/
+				else if(s.ps=='sqrt(') SQC(s,'sqrt',2,pl)&&--pn; //Simp Sqrt
+				else if(s.ps=='cbrt(') SQC(s,'cbrt',3,pl)&&--pn; //Simp Cbrt
+				//TODO: rad|deg|sin|cos|tan|sec|csc|cot|asin|acos|atan|perm|comb
+				else if(n && s.ps=='tpose(') MFN(s,'tpose',pl)&&--pn;
+				else if(n && s.ps=='det(') MFN(s,'det',pl,1)&&--i;
+				else if(n && s.ps=='inv(') MFN(s,'inv',pl)&&--pn;
+				else if(n && s.ps=='rref(') MFN(s,'rref',pl)&&--pn;
+				else if(n && s.ps=='sum(') MFN(s,'sum',pl,1)&&--i;
+				else if(n && s.ps=='rows(') MFN(s,'r',pl,2);
+				else if(n && s.ps=='cols(') MFN(s,'c',pl,2);
+				else if(s.ps=='dot(') {
+					ACT(pl,2); if(pn!=1) continue; let a=MAT(s),b=MAT(s,1);
+					if(a&&b) s.sx(a.dot(b)),--i; else if(!VRS(n)) throw "Bad input to dot";
+				} else if(s.ps=='dotPow(') {
+					ACT(pl,2); if(pn!=1) continue; let a=MAT(s),b=MAT(s,1);
+					if(a&&!b) s.sx(a.dotPow(p)),--i; else if(!VRS(n)) throw "Bad input to dotPow";
+				} else if(s.ps=='norm(') {
+					let a,b; if(pl==1) p=2; else {ACT(pl,2); if(pn!=1) continue; b=MAT(s,1)}
+					a=MAT(s); if(a&&!b) s.sx(a.norm(p)),--i; else if(!VRS(n)) throw "Bad input to norm";
+				} else if(n && s.ps=='eye(') {
 					ACT(pl,1); if(!n.d[1] && INT(n.e) && n.e>0) s.sx(Matrix.eye(Number(n.e))),mt=1;
 					else if(!VRS(n)) throw "Non-Int Identity";
 				}
 			} else if(s.m) s.m.simp(xv),mt=1; //Matrix Simp
-			else if(xv&&xv[s.x]) s.sx(xv[s.x]); //Set Var
+			else if(xv&&xv[s.x]) s.sx(xv[s.x]),--i; //Set Var
+			else if(!FRAC) { //Irrational Const
+				if(s.x=='P') s.sx(PI),--i;
+				else if(s.x=='e' && NUM(n=s.np())) s.sx(Dec.exp(n)),--i;
+			}
 		}
 		let e=this.e,v={},x,n; d.each((s,i) => {
 			if((n=NUM(s.p)) && NUM(s.e)) { //Apply Pow
@@ -261,8 +292,10 @@ class Term {
 			if(s.e && !NUM(s.e)) return e=NAN; //Set NaN
 			if(s.np()==-1) { //Simp Frac, Div-by-zero
 				if(s.e==0) return e=NAN; if(NUM(e) && s.e) {
-					let f=GCD(e,s.e), n=s.e.div(f); if(n<0) f=-f,n=-n;
-					e=e.div(f), s.sx(n); if(n==1) return '!';
+					if(!FRAC) return e=e.div(s.e),'!'; else {
+						let f=GCD(e,s.e), n=s.e.div(f); if(n<0) f=-f,n=-n;
+						e=e.div(f), s.sx(n); if(n==1) return '!';
+					}
 				}
 			}
 		});
@@ -305,12 +338,9 @@ class SubTerm {
 	xs() { //Get exponent string
 		let m=this; return m.m?m.m.toString():(m.x||m.ps+m.pr.join(', ')+')');
 	}
-	xis() { //Get inner string
-		let m=this; return m.m?m.m.toString():(m.x||m.pr.join(', '));
-	}
 	sx(x) { //Set exponent
 		let m=this,p,q; delete m.ps; delete m.pr; delete m.x;
-		if(NUM(x,1)) m.x=abs(m.e=x instanceof Dec?x:new Dec(x)).toString(),m.n=NG(m.e);
+		if(NUM(x,1)) m.x=abs(m.e=x instanceof Dec?x:Dec(x)).toString(),m.n=NG(m.e);
 		else if(x instanceof Matrix) m.m=x,m.n=0; //Raw Matrix
 		else if((p=x.indexOf('['))!=-1 && (q=x.indexOf('('))==-1 || q>p) { //Matrix
 			if(x.indexOf('!')!=-1 || x.indexOf('%')!=-1) throw "Illegal Operator";
@@ -321,14 +351,12 @@ class SubTerm {
 			}
 		} else { //String
 			p=x.endsWith('!');
-			if(x.endsWith('%')) x=(new Dec(x.substr(0,x.length-(p?2:1))).div(100)).toString();
+			if(x.endsWith('%')) x=(Dec(x.substr(0,x.length-(p?2:1))).div(100)).toString();
 			else if(p) x=x.substr(0,x.length-1); if(p) x=`perm(${x})`;
-			m.n=NG(m.x=x.replace(/ /g,'')); delete m.e; try {m.e=new Dec(m.x)} catch(e){}
+			m.n=NG(m.x=x.replace(/ /g,'')); delete m.e; try {m.e=Dec(m.x)} catch(e){}
 			if(!m.e && (p=x.indexOf('('))!=-1) {
-				m.ps=x.substring(m.n?1:0,p+1).replace(/ /g,'');
-				m.pr=[new Poly(x.substr(p))]; delete m.x;
-				//Split string by ',' to allow funcs with multiple params
-				//Also have to update xs() to print it!
+				m.ps=x.substring(m.n?1:0,p+1).trim(), p=pSplit(x.substring(p+1,x.length-1),',');
+				m.pr=[]; p.forEach(a => m.pr.push(new Poly(a))); delete m.x;
 			} else m.x=m.x.substr(m.n?1:0);
 		}
 	}
@@ -363,7 +391,7 @@ class Matrix {
 		else if(m.c!=r.length) throw "Matrix Dimension";
 		m.a.push(r);
 	}
-	ns(r,c) {let n=this.a[r][c];return n.t.length>1?`(${n})`:n.s()} //Item Str
+	ns(r,c,p) {r=this.a[r][c];return p||r.t.length>1?`(${r})`:r.s()} //Item Str
 	toString(p) {
 		let m=this,s,r,c,d,dd,cl,f=m.c-1; if(p) {
 			for(c=0,dd=0,cl=new Array(m.c); c<m.c; ++c) {
@@ -379,7 +407,7 @@ class Matrix {
 				(cl[c]-d.length+(c==f?0:MAT_COL_W)):c==f?'':' ');
 			if(p) s+=' |';
 		}
-		if(p) s='\n'+this.toString()+s+'\n'+dd; else s+=']';
+		if(p) s=m.toString()+s+'\n'+dd; else s+=']';
 		return s;
 	}
 	simp(xv) {let m=this,r=0,c;for(; r<m.r; ++r) for(c=0; c<m.c; ++c) m.a[r][c].simp(xv);return m} //Simplify
@@ -387,14 +415,36 @@ class Matrix {
 		let m=this,r=0,c;for(; r<m.r; ++r) for(c=0; c<m.c; ++c) m.a[r][c]=new Poly(m.ns(r,c)+'*'+x);
 		return m;
 	}
+	sum() { //Sum
+		let m=this,r=0,c,s='';for(; r<m.r; ++r) for(c=0; c<m.c; ++c) s+=(s?'+':'')+m.ns(r,c);
+		return `(${s})`;
+	}
+	func(f) {
+		let m=this,r=0,c;for(; r<m.r; ++r) for(c=0; c<m.c; ++c) m.a[r][c]=new Poly(f+m.ns(r,c,1));
+		return m;
+	}
 	mul(b) { //Mat x Mat
-		let m=this,n=new Array(m.r);
-		if(m.c != b.r) throw "Matrix Multiply Dimension";
-		for(let m=this,r=0,c,z,ns; r<m.r; ++r) for(c=0,n[r]=new Array(b.c); c<b.c; ++c) {
-			for(z=0,ns=''; z<m.c; ++z) ns+=(z?'+':'')+`(${m.a[r][z]})(${b.a[z][c]})`;
-			n[r][c]=new Poly(ns);
+		let m=this,n=new Array(m.r); if(m.c!=b.r) throw "Matrix Multiply Dimension";
+		for(let r=0,c,z,ns; r<m.r; ++r) for(c=0,n[r]=new Array(b.c); c<b.c; ++c) {
+			for(z=0,ns=''; z<m.c; ++z) ns+=(z?'+':'')+m.ns(r,z,1)+b.ns(z,c,1); n[r][c]=new Poly(ns);
 		}
 		return new Matrix(n);
+	}
+	dot(b) { //Mat * Mat
+		let m=this; if(m.r!=b.r || m.c!=b.c) throw "Matrix Dot Dimension";
+		for(let r=0,c; r<m.r; ++r) for(c=0; c<m.c; ++c) m.a[r][c]=new Poly(m.ns(r,c,1)+b.ns(r,c,1));
+		return m;
+	}
+	dotPow(p) { //Mat ^ p
+		let m=this,r=0,c; p=`^(${p})`;
+		for(; r<m.r; ++r) for(c=0; c<m.c; ++c) m.a[r][c]=new Poly(m.ns(r,c,1)+p);
+		return m;
+	}
+	norm(p) {return '('+this.dotPow(p).func('abs').sum()+`^(1/(${p})))`} //p-norm
+	add(b) { //Mat + Mat
+		let m=this,r=0,c; if(m.r!=b.r || m.c!=b.c) throw "Matrix Add Dimension";
+		for(; r<m.r; ++r) for(c=0; c<m.c; ++c) m.a[r][c].t.push(...b.a[r][c].t);
+		return m;
 	}
 	tpose() { //Transpose
 		let m=this,c=0,r,n=new Array(m.c);
@@ -403,13 +453,12 @@ class Matrix {
 	}
 	det() { //Determinant
 		let m=this,c=0,i,b,aj,bj,g,s='',sl=m.r-1;
-		if(m.r!=m.c) throw "Non-Square Determinant";
-		if(m.r == 1) return m.a[0][0].s();
-		if(m.r == 2) return `(${m.a[0][0]})(${m.a[1][1]})-(${m.a[0][1]})(${m.a[1][0]})`;
+		if(m.r!=m.c) throw "Non-Square Determinant"; if(m.r==1) return m.ns(0,0);
+		if(m.r==2) return `(${m.ns(0,0,1)+m.ns(1,1,1)}-${m.ns(0,1,1)+m.ns(1,0,1)})`;
 		for(; c<m.r; ++c) {
 			for(i=0,b=new Array(sl); i<sl; ++i) for(aj=0,bj=0,b[i]=new Array(sl); aj<m.r; ++aj)
 				if(aj!=c) b[i][bj++]=m.a[i+1][aj];
-			s+=(s?g?'-':'+':'')+`(${m.a[0][c]})(${new Matrix(b).det()})`, g=!g;
+			s+=(s?g?'-':'+':'')+m.ns(0,c,1)+new Matrix(b).det(), g=!g;
 		}
 		return s;
 	}
@@ -426,15 +475,13 @@ class Matrix {
 		for(; r<m.r; ++r,++ld) {
 			i=r; if(m.c <= ld) return m;
 			while(PZ(m.a[i][ld])) if(++i == m.r) {i=r; if(++ld == m.c) return m}
-			n=m.a[i]; m.a[i]=m.a[r]; m.a[r]=n; //Swap rows i and r
+			n=m.a[i], m.a[i]=m.a[r], m.a[r]=n; //Swap rows i and r
 			if(!PZ(n=m.a[r][ld])) { //Div row r by n
-				for(c=0,n=`/(${n})`; c<m.c; ++c) m.a[r][c]=new Poly(`(${m.a[r][c]})`+n).simp();
-				msg(m.toString());
+				for(c=0,n=`/(${n})`; c<m.c; ++c) m.a[r][c]=new Poly(m.ns(r,c)+n).simp();
 			}
 			for(i=0; i<m.r; ++i) if(i!=r) {
-				for(c=0,n=`-(${m.a[i][ld]})`; c<m.c; ++c) { //row i -= m.a[i][ld]*row r
-					m.a[i][c].t.push(new Term(n+`(${m.a[r][c]})`)); m.a[i][c].simp();
-					msg(m.toString());
+				for(c=0,n='-'+m.ns(i,ld,1); c<m.c; ++c) { //row i -= m.a[i][ld]*row r
+					m.a[i][c].t.push(new Term(n+m.ns(r,c))); m.a[i][c].simp();
 				}
 			}
 		}
@@ -452,7 +499,7 @@ tSer=(t,v) => t.d.each((s,i) => sSer(s,v)?i:null), //Term var search
 pSer=(p,v) => p.t.each((t,i) => tSer(t,v)!=null?i:null), //Poly var search
 sGet=s => {let q=EQ.exec(s),i=q.index,l=q[0].length; return [s.substr(i,l),
 	s.substr(0,i).trim(),s.substr(i+l).trim()]}, //Get Sign
-FACT_MAX=1000000000, LF=n => {if(n>FACT_MAX)return [n];let f=[],i=1;
+LF=n => {if(n>FACT_MAX)return [n];let f=[],i=1;
 	for(n=abs(n);i<=n;++i)if(n%i===0)f.push(i);return f} //List Factors
 
 function Der(p,v) { //Calc Derivative
@@ -478,17 +525,17 @@ function Der(p,v) { //Calc Derivative
 				}}
 				if(w!=1||!n) n+=(w==1)?'1':w+q.x+`^(${w}-1)`; //Var Power
 			}
-			if(ql>1) msg(Color.Ylo+`d/d${v}[${q.s()}] =`,n);
+			if(ql>1) msg(C.Ylo+`d/d${v}[${q.s()}] =`,n);
 			f.push(n);
 		});
 		if(ql==2) { //Quotient/Product Rule
 			x=q[1].QN, w=q[1].s();
 			msg(`\nUsing ${x?'Quotient':'Product'} Rule:`);
 			if(x) {
-				msg(Color.Di+"(f'(x)*g(x) - f(x)*g'(x))/g(x)^2");
+				msg(C.Di+"(f'(x)*g(x) - f(x)*g'(x))/g(x)^2");
 				f=[`((${f[0]})(${w}) - (${q[0].s()})(${f[1]}))/(${w})^2`];
 			} else {
-				msg(Color.Di+"g(x)*f'(x) + f(x)*g'(x)");
+				msg(C.Di+"g(x)*f'(x) + f(x)*g'(x)");
 				f=[`(${w})(${f[0]})`,`(${q[0].s()})(${f[1]})`];
 			}
 			msg(f.join(' + ')+'\n');
@@ -496,7 +543,7 @@ function Der(p,v) { //Calc Derivative
 		f.each((t,i) => {f[i]=c+t}); d.push(...f);
 	});
 	d.each((t,i) => {d[i]=new Term(t)}); x=(d=new Poly(d)).s(), f=d.simp(v).s();
-	msg(Color.Ylo+`d/d${v}[${ps}]\n`+Color.Br+Color.Blu+`= ${x}`+(f!=x?'\n= '+f:''));
+	msg(C.Ylo+`d/d${v}[${ps}]\n`+C.Br+C.Blu+`= ${x}`+(f!=x?'\n= '+f:''));
 	return f;
 }
 
@@ -520,7 +567,7 @@ function ADer(p,v) { //Calc Antiderivative
 		ql=q.length; if(ql>1) throw "Can't do >2 sub-terms yet!";
 		/*if(ql==2) { //Product Rule
 			f.f=`(${Der(new Poly(q[0].s()),v)})`,msg(),f.g=`(${ADer(new Poly(q[1].s()),v)})`;
-			msg(`\nUsing Product Rule:\n${Color.Di}f(x)*S(g(x))dx - S(f'(x)*S(g(x))dx)dx`);
+			msg(`\nUsing Product Rule:\n${C.Di}f(x)*S(g(x))dx - S(f'(x)*S(g(x))dx)dx`);
 			f=[`(${q[0].s()})`+f.g,'-'+f.f+f.g];
 		} else *if(q=q[0]) {
 			x=q.ps?q.pr.s():q.x, w=q.np(), n='';
@@ -544,14 +591,14 @@ function ADer(p,v) { //Calc Antiderivative
 		f.each((t,i) => {f[i]=c+t}); d.push(...f);
 	});
 	d.each((t,i) => {d[i]=new Term(t)}); x=(d=new Poly(d)).s(), f=d.simp(v).s();
-	msg(Color.Ylo+`S(${ps})d${v}\n`+Color.Br+Color.Blu+`= ${x} + C`+(f!=x?`\n= ${f} + C`:''));
+	msg(C.Ylo+`S(${ps})d${v}\n`+C.Br+C.Blu+`= ${x} + C`+(f!=x?`\n= ${f} + C`:''));
 	return f;
 }
 
 //============================================== Graphics ==============================================
 
-let GFX; const GBG=Color.Br+Color.Blk+Color.BgWhi,
-GC=[Color.Red, Color.Blu, Color.Grn, Color.Mag, Color.Ylo];
+let GFX; const GBG=C.Br+C.Blk+C.BgWhi,
+GC=[C.Red, C.Blu, C.Grn, C.Mag, C.Ylo];
 function NCP(n,p) {return p?Math.round(n*p)/p:n} //Clip Precision
 //function PC(n) {n=n.toString();let i=n.indexOf('.');return i==-1?0:n.length-i-1} //Get Precision
 
@@ -582,7 +629,7 @@ function pGraph(fl,w,h,xp,yp,z) {
 			a=fl[f](VAR)*z,oy=Math.round(a),xf[f]=[oy,a==oy];
 	}
 	for(; y<h; ++y) { //Draw Graph
-		s+=(y?Color.Rst+'\n':'')+GBG; for(x=0; x<w;) {
+		s+=(y?C.Rst+'\n':'')+GBG; for(x=0; x<w;) {
 			ox=x-cx,oy=cy-y; for(f=0; f<fn; ++f) {
 				xf=fx[x][f]; if(oy==xf[0]) a=GC[f]+(xf[1]?'*':'~')+GBG,n=1;
 			}
@@ -598,13 +645,15 @@ function pGraph(fl,w,h,xp,yp,z) {
 
 const ML = {
 	r:'Run'
-}, CS=/(?:^|\s+)("[^"]+"|\S+)/g, CC='`',
-MC=Color.BgBlu+Color.Whi, VAR={};
+}, CS=/(?:^|\s+)("[^"]+"|\S+)/g,
+CC='`', CM=C.BgBlu+C.Whi, CD=C.Br+C.Cya,
+CR=C.Blk, CV=C.Rst+C.Di, VAR={};
 
-let n,HLP='dec/frac = Fractional Results\nsv = Substitute Variables\njs = JavaScript Mode\n\
-deg = Toggle Deg/Rad Mode\nvars = List Variables\ndel <x> = Delete Var\n\n';
+let n,HLP=`${CD}dec/frac${CR} = Toggle Fractions\n${CD}sv${CR} = Substitute Variables\n\
+${CD}js${CR} = JavaScript Mode\n${CD}deg${CR} = Toggle Deg/Rad Mode\n\
+${CD}vars${CR} = List Variables\n${CD}del <x>${CR} = Delete Var\n\n`+C.Rst;
 for(let k in ML) HLP+=(n!=null?','+(n?' ':'\n'):'')+CC+k+' = '+ML[k],n=!n;
-msg(Color.Grn+"Pecacheu's Math Solver "+VERS);
+msg(C.Br+C.Grn+"Pecacheu's Math Solver "+C.Ylo+VERS);
 await run(process.argv); rl.close();
 
 async function runCmd(s) {
@@ -617,42 +666,38 @@ async function runCmd(s) {
 async function run(A) {
 let T=A[2], AL=A.length;
 if(!T) T='r'; else if(T=='?') return msg(HLP);
-msg(Color.BgMag+"Mode:",ML[T]?ML[T]+Color.Rst+'\n':"Not Supported");
+msg(C.BgMag+"Mode:",ML[T]?ML[T]+C.Rst+'\n':"Not Supported");
 if(T=='r') { //RUN
 	msg("Type '?' for help, 'q' to quit.");
 	let f,n,r,S=1,FR=1,DM;
 	while((f=(await read('>')).trim())!='q') try {
 		if(f=='?') msg(HLP); else if(f.startsWith(CC)) await runCmd(f.substr(1));
-		else { let s=f;//f.split(';').each(s => { //TEMP: ; doesn't work with mat!
-			if(s=='dec'||s=='frac') msg(MC+"Fractions",(FR=FR==1?0:1)?"On":"Off");
-			else if(s=='sv') msg(MC+"Substitution",(S=S==1?0:1)?"On":"Off");
-			else if(s=='js') msg(MC+"JS Mode",(S=S==2?0:2)?"On":"Off");
-			else if(s=='deg') msg(MC+"Angle Mode:",(DM=DM?0:1)?"Deg":"Rad");
-			else if(s.startsWith('del ')) delete(VAR[s=s.substr(4).trim()]),msg("Delete",s);
-			else if(s=='vars') msg(VAR); else {
-				if(S==2) try {n=s,r=eval(s)} catch(e) {r=Color.Red+e} //JS Mode
-				else {
-					s=new Poly(s); n=s.s(); //TEMP?
-					s.simp(S&&VAR);
-					//Test for var set:
-					r=s.t[0],f=r&&s.t[1]&&s.t[1].q=='='&&r.e==1&&!r.d[2]&&s.t[1].d.length==1;
-					//TODO: This must check BEFORE simp, because simp replaces the vars!
-					if(f) r=r.d[1].x;
-					if(!FR) s=s.calc(DM); //Calc
-					if(f) { //Var set
-						if(s instanceof Dec) f=s; else f=s.t[1].e;
-						VAR[r]=f; r=Color.Di+`Set ${r} to `+Color.Ylo+f;
-					} else {
-						if(s.t.length==1 && (r=s.t[0]).e==1 && r.d.length==2 &&
-							(r=r.d[1]) && r.m) s=r.m.toString(1); //Matrix Print
-						r=Color.Ylo+s;
-					}
-					//msg((r&&f===1?`f(${VAR.x}) = `:'')+Color.Ylo+s);
+		else if(S==2) RUN(f); else pSplit(f,';').each(RUN);
+	} catch(e) {msg(C.Red+'->',e)}
+	function RUN(s) {
+		if(s=='dec'||s=='frac') msg(CM+((FR=FR==1?0:1)?"Fractional":"Decimal"),"Output");
+		else if(s=='sv') msg(CM+"Substitution",(S=S==1?0:1)?"On":"Off");
+		else if(s=='js') msg(CM+"JS Mode",(S=S==2?0:2)?"On":"Off");
+		else if(s=='deg') msg(CM+"Angle Mode:",(DM=DM?0:1)?"Deg":"Rad");
+		else if(s.startsWith('del ')) delete(VAR[s=s.substr(4).trim()]),msg("Delete",s);
+		else if(s=='vars') msg(VAR); else {
+			if(S==2) try {n=s,r=eval(s)} catch(e) {r=C.Red+e} //JS Mode
+			else {
+				s=new Poly(s),n=s.s(); s.simp(S&&VAR);
+				if(!FR) FRAC=0,s.simp(),FRAC=1; r=s.s();
+				if(f=n.match(VSV)) { //Set Var
+					r=r.substr(r.indexOf('=')+2);
+					if(f[1]==r) throw "Cannot set var to itself!";
+					VAR[f[1]]=r, r=CV+`Set ${C.Ylo+f[1]+CV} to `+C.Rst+C.Ylo+r;
+				} else if(!VRT.test(r) && VEQ.test(r)) { //Eval T/F
+					r+=C.Grn+" ~ "+eval(r.replace(/(?<![<>])=/g,'=='));
 				}
-				msg(Color.Di+n,Color.Rst+'\n->',r);
+				if(!s.t[1] && (f=MAT(s.t[0]))) r=f.toString(1); //Mat Print
+				r=C.Ylo+r;
 			}
-		}//});
-	} catch(e) {msg(Color.Red+'->',e)}
+			msg(C.Di+n,C.Rst+'\n->',r);
+		}
+	}
 }}
 /*} else if(T=='s') { //Solve
 	let p=A[3], v=A[4]||'x', pm=p&&Array.from(p.matchAll(new RegExp(EQ,'g')));
@@ -663,8 +708,8 @@ if(T=='r') { //RUN
 	for(p=0; p<pl.length; p++) { //Solve Poly
 		let a,s,s2,m,LP=0; if(p) msg("\nSolve Split #"+p);
 		while((s=pl[p].s()) != s2) { //Run Solver
-			x=[]; if(++LP>20) throw "Stuck!"; msg(s,Color.Di+(m?`(${m})`:''));
-			m=0,a=(pl[p]=pl[p].simp(v)).t; if((s2=pl[p].s()) != s) msg(s2,Color.Di+"(Simplify)");
+			x=[]; if(++LP>20) throw "Stuck!"; msg(s,C.Di+(m?`(${m})`:''));
+			m=0,a=(pl[p]=pl[p].simp(v)).t; if((s2=pl[p].s()) != s) msg(s2,C.Di+"(Simplify)");
 			if(!a.each((t,i) => { //Move Term
 				if((q=tSer(t,v))!=null) x.push({t:t,s:t.d[q]});
 				if(t.e && !q==!t.q) { //Non-zero terms on wrong side of eq
@@ -692,7 +737,7 @@ if(T=='r') { //RUN
 							if(r) s.pr?(m=s.pr,s.NP=w-1):(ml.push(s.s()),s.NP=0);
 						}});
 						if(m || ml.length) {
-							if(!m) m=new Poly(ml.join(' ')); msg(Color.Cya+`\nMultiply (${q.s.pr}) by (${m})`);
+							if(!m) m=new Poly(ml.join(' ')); msg(C.Cya+`\nMultiply (${q.s.pr}) by (${m})`);
 							q.t.d.each((s,i) => s.NP==null?null:s.NP?s.sp(s.NP):i?'!':(q.t.d[i]=new SubTerm(1),null));
 							q.t.d.push(new SubTerm(`(${pMul(q.s.pr,m,1)})`)),msg(),m="Distribute"; continue;
 						}
@@ -711,8 +756,8 @@ if(T=='r') { //RUN
 						a.each((t,i) => t.q?(a.splice(i,0,m),1):null);
 						(q=m.copy()).q=1; a.push(q);
 						q=[pl[p].s(),(pl[p]=pl[p].simp()).s()];
-						msg(q[0],Color.Di+`(Add (b/2a)^2 = ${m})`);
-						if(q[0]!=q[1]) msg(q[1],Color.Di+"(Simplify)");
+						msg(q[0],C.Di+`(Add (b/2a)^2 = ${m})`);
+						if(q[0]!=q[1]) msg(q[1],C.Di+"(Simplify)");
 						m=(a=pl[p].t).each((t,i) => t.q?i:null);
 						a.splice(0,m,new Term(`(${v}+${b}/2)^2`));
 						m="Reverse Square Rule", qd=2; continue;
@@ -735,7 +780,7 @@ if(T=='r') { //RUN
 				}
 				if(x.length != 1) break; //Couldn't solve!
 				if((x=x[0]).s.np() != 1) { //Square Pow
-					if(x.s.np() != 2) return msg(Color.Red+"Can't handle non-square pow yet!");
+					if(x.s.np() != 2) return msg(C.Red+"Can't handle non-square pow yet!");
 					x.s.sp(1), q=a[1].q, m=sGet(s2), s=`sqrt(${m[2]})`;
 					a.splice(1,a.length,new Term(s)), pl.push(new Poly(x.t+SFL(m[0])+'-'+s));
 					a[1].q=q, m="Undo Square; Split #"+(pl.length-1);
@@ -743,8 +788,8 @@ if(T=='r') { //RUN
 			}
 		}
 		m=s==s2?sGet(s):0;
-		if(!m || !s.startsWith(v+' '+m[0])) msg(Color.Red+"Couldn't solve!"); else {
-			msg(Color.Ylo+"Done!"); re.push(pl[p]); q=m[0][0], x=m[0][1];
+		if(!m || !s.startsWith(v+' '+m[0])) msg(C.Red+"Couldn't solve!"); else {
+			msg(C.Ylo+"Done!"); re.push(pl[p]); q=m[0][0], x=m[0][1];
 			if(q=='>') re.gt=eval(m[2]),re.gq=(x?'[':'(')+m[2];
 			else if(q=='<') re.lt=eval(m[2]),re.lq=m[2]+(x?']':')');
 		}
@@ -752,9 +797,9 @@ if(T=='r') { //RUN
 	q=''; if(re.gt >= re.lt) q=`(-infinity, ${re.lq}U${re.gq}, infinity)`;
 	else if(re.gt < re.lt) q=re.gq+', '+re.lq; else if(re.gt != null) q=re.gq+', infinity)';
 	else if(re.lt != null) q='(-infinity, '+re.lq;
-	if(re.length) msg(Color.Br+Color.Blu+'\n'+re.join('; '),q?'\n'+q:'');
+	if(re.length) msg(C.Br+C.Blu+'\n'+re.join('; '),q?'\n'+q:'');
 	if(re.length==1 && re[0].t.each(t => t.q)=='=') {
-		q=eval(sGet(re[0].s(1))[2]); if(NA(q)) msg(Color.Di+`Set var ${v} to`,VAR[v]=q);
+		q=eval(sGet(re[0].s(1))[2]); if(NA(q)) msg(C.Di+`Set var ${v} to`,VAR[v]=q);
 	}
 } else if(T=='g') { //Graph
 	if(AL<4) return use(T,"<poly1> [x] [y] [zoom] [poly2] [poly3]...");
@@ -762,7 +807,7 @@ if(T=='r') { //RUN
 	for(; i<AL; ++i) p.push(new Poly(A[i]).simp());
 	for(i=0; i<p.length; ++i) {
 		f.push(eval(`v=>(${p[i].s(1)})`));
-		s+=(i?', ':'')+Color.Br+GC[i]+p[i].s()+Color.Rst;
+		s+=(i?', ':'')+C.Br+GC[i]+p[i].s()+C.Rst;
 	}
 	await sGraph(s,f,x,y,Number(A[6]));
 } else if(T=='d') { //Derivative
@@ -908,7 +953,7 @@ if(T=='r') { //RUN
 }*else if(T=='sm') { //Summation
 	let n=Number(A[4]),i=Number(A[5]); if(!n) return use(T,"<poly> <n> [k]\nE[n;i=k](poly)");
 	if(Number.isNaN(i)) i=1; let r='',p=new Poly(A[3]).simp().s();
-	msg(Color.Ylo+`E[${n};i=${i}](${p})`);
+	msg(C.Ylo+`E[${n};i=${i}](${p})`);
 	for(; i<=n; ++i) r+=(r.length?" + ":'')+`(${p.replace(/i/g,`(${i})`)})`;
-	msg('= '+r); msg(Color.Br+Color.Blu+'= '+new Poly(r).simp());
+	msg('= '+r); msg(C.Br+C.Blu+'= '+new Poly(r).simp());
 }}*/

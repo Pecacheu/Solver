@@ -1,0 +1,3 @@
+[submodule "AutoLoader"]
+	path = AutoLoader
+	url = https://github.com/Pecacheu/AutoLoader

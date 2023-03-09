@@ -1,17 +1,11 @@
 //Solver.js ©2022 Pecacheu. GNU GPL v3.0
-const VERS="v1.7.1";
+const VERS="v1.7.2";
 
 import rdl from 'readline';
-import Color from './color.mjs';
+import {C as Color,msg} from './AutoLoader/color.mjs';
 
 process.stdin.setRawMode(1);
 process.stdin.setEncoding('utf8');
-function msg() {
-	let a=arguments,l=a.length-1;
-	if(typeof a[l]=='string') a[l]+=Color.Rst;
-	else Array.prototype.push.call(a,Color.Rst);
-	console.log(...a);
-}
 const use=(t,u) => msg(Color.Red+"Usage:",t,u),
 rl=rdl.createInterface(process.stdin, process.stdout),
 read=q => new Promise(r=>{rl.question(q+' ',n=>r(n))}),
@@ -429,7 +423,7 @@ let n,HLP='simp = Simplify Mode\nsx = Simplify X Mode\n\
 code = JavaScript Mode\nvars = List Vars\ndel <x> = Delete Var\n\n';
 for(let k in ML) HLP+=(n!=null?','+(n?' ':'\n'):'')+CC+k+' = '+ML[k],n=!n;
 msg(Color.Grn+"Pecacheu's Math Solver "+VERS);
-await run(process.argv); rl.close();
+process.argv.shift(); await run(process.argv); rl.close();
 
 async function runCmd(s) {
 	let c=[0,0],m; while(m=CS.exec(s)) {
